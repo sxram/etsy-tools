@@ -36,6 +36,7 @@ export type EtsyListing = {
   shipping_profile_id?: number | null;
   who_made?: string;
   when_made?: string;
+  is_supply?: boolean;
   images?: EtsyListingImage[];
 };
 
@@ -51,4 +52,16 @@ export type DigitalFileGroup = {
   key: string;
   displayName: string;
   files: string[];
+};
+
+export type EtsyListingFile = {
+  listing_file_id: number;
+  listing_id: number;
+  rank: number;
+  filename: string;
+  filesize?: string;
+  size_bytes?: number;
+  filetype?: string;
+  create_timestamp?: number;
+  created_timestamp?: number;
 };

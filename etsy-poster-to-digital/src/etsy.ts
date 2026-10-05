@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import { API_BASE, config } from "./config.js";
 import { loadToken, saveToken } from "./token-store.js";
-import type { EtsyListing, EtsyListingImage, EtsyShop, EtsyToken } from "./types.js";
+import type { EtsyListing, EtsyListingFile, EtsyListingImage, EtsyShop, EtsyToken } from "./types.js";
 
 function xApiKey() { return `${config.apiKey}:${config.sharedSecret}`; }
 
@@ -73,11 +73,11 @@ export async function getListing(listingId: number): Promise<EtsyListing> {
 }
 
 export async function getListingImages(shopId: number, listingId: number): Promise<EtsyListingImage[]> {
-  const result = await etsyFetch<{ count: number; results: EtsyListingImage[] }>(`/application/shops/${shopId}/listings/${listingId}/images`);
+  const result = await etsyFetch<{ count: number; results: EtsyListingImage[] }>(`/application/listings/${listingId}/images`);
   return result.results;
 }
 
-export async function createDigitalDraft(input: {shopId:number; source:EtsyListing; imageIds:number[]; title:string; description:string; price?:number;}): Promise<EtsyListing> {
+export async function createDigitalDraft(input: {shopId:number; source:EtsyListing; imageIds:number[]; title:string; description:string; tags:string[]; price?:number;}): Promise<EtsyListing> {
   const src = input.source;
   if (!src.taxonomy_id) throw new Error("Source listing has no taxonomy_id.");
   if (!src.who_made) throw new Error("Source listing has no who_made value.");
@@ -88,11 +88,15 @@ export async function createDigitalDraft(input: {shopId:number; source:EtsyListi
   body.set("description", input.description);
   body.set("price", (input.price ?? config.digitalPrice).toFixed(2));
   body.set("who_made", src.who_made);
-  body.set("when_made", src.when_made);
+  // Do NOT copy "made_to_order" from a physical POD source listing.
+  // For digital products Etsy interprets when_made=made_to_order as a
+  // made-to-order digital item rather than an instant download.
+  body.set("when_made", config.digitalWhenMade);
+  body.set("is_supply", "false");
   body.set("taxonomy_id", String(src.taxonomy_id));
   body.set("type", "download");
   if (input.imageIds.length) body.set("image_ids", input.imageIds.join(","));
-  if ((src.tags || []).length) body.set("tags", (src.tags || []).slice(0, 13).join(","));
+  if (input.tags.length) body.set("tags", input.tags.slice(0, 13).join(","));
   return etsyFetch<EtsyListing>(`/application/shops/${input.shopId}/listings`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -100,9 +104,57 @@ export async function createDigitalDraft(input: {shopId:number; source:EtsyListi
   });
 }
 
-export async function uploadDigitalFile(shopId: number, listingId: number, filePath: string): Promise<unknown> {
+export async function uploadDigitalFile(shopId: number, listingId: number, filePath: string, rank = 1): Promise<unknown> {
   const bytes = await readFile(filePath);
+  const fileName = basename(filePath);
   const form = new FormData();
-  form.append("file", new Blob([bytes]), basename(filePath));
-  return etsyFetch(`/application/shops/${shopId}/listings/${listingId}/files`, { method: "POST", body: form });
+
+  // Etsy uploadListingFile requires BOTH the binary `file` field and
+  // a separate `name` field for a new upload. The filename passed to
+  // FormData.append() alone is not sufficient.
+  form.append("file", new Blob([bytes]), fileName);
+  form.append("name", fileName);
+  form.append("rank", String(rank));
+
+  return etsyFetch(`/application/shops/${shopId}/listings/${listingId}/files`, {
+    method: "POST",
+    body: form,
+  });
+}
+
+
+export async function setListingInstantDownload(
+  shopId: number,
+  listingId: number,
+  whoMade = "i_did",
+): Promise<EtsyListing> {
+  const body = new URLSearchParams();
+  body.set("type", "download");
+  body.set("when_made", config.digitalWhenMade);
+  body.set("who_made", whoMade);
+  body.set("is_supply", "false");
+
+  return etsyFetch<EtsyListing>(
+    `/application/shops/${shopId}/listings/${listingId}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body,
+    }
+  );
+}
+
+// Backward-compatible alias used by older call sites.
+export async function setListingTypeToDownload(
+  shopId: number,
+  listingId: number,
+): Promise<EtsyListing> {
+  return setListingInstantDownload(shopId, listingId);
+}
+
+export async function getAllListingFiles(shopId: number, listingId: number): Promise<EtsyListingFile[]> {
+  const result = await etsyFetch<{ count: number; results: EtsyListingFile[] }>(
+    `/application/shops/${shopId}/listings/${listingId}/files`
+  );
+  return result.results;
 }
