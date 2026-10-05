@@ -1,0 +1,11 @@
+node_modules/
+.env
+.etsy-token.json
+out/
+dist/
+.DS_Store
+
+originals/
+digital/
+
+

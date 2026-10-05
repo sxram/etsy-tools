@@ -1,0 +1,23 @@
+{
+  "name": "etsy-poster-to-digital",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "auth": "tsx src/cli.ts auth",
+    "list": "tsx src/cli.ts list",
+    "posters": "tsx src/cli.ts posters",
+    "whoami": "tsx src/cli.ts whoami",
+    "digital:scan": "tsx src/cli.ts digital:scan",
+    "digital:preview": "tsx src/cli.ts digital:preview",
+    "digital:create": "tsx src/cli.ts digital:create"
+  },
+  "dependencies": {
+    "dotenv": "^16.6.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.7.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
