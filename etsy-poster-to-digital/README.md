@@ -1,307 +1,587 @@
-# Etsy Poster → Digital v0.2
+# Etsy Poster → Digital
 
-This version groups local printable files and creates one **digital Etsy draft** from one existing physical poster listing.
+TypeScript CLI for converting existing physical Etsy poster listings into **digital instant-download draft listings**.
 
-## Your filename example
+The tool is designed for a workflow where the physical poster already exists on Etsy and the high-resolution printable files are stored locally.
 
-```text
-Yellow Alien Space Poster_Pip_Comet_3x4_60x80cm_300dpi.jpg
-Yellow Alien Space Poster_Pip_Comet_4x3_80x60cm_300dpi.jpg
+Current state:
+- Poster matching works
+- Portrait + landscape files can be grouped automatically
+- Digital drafts can be created
+- Existing drafts can be resumed safely
+- Digital files are uploaded and verified
+- Listings are configured as **instant downloads**, not "made to order"
+- Titles, descriptions and tags are generated/adapted automatically
+- Batch preview / creation is supported
+- Draft prices can be changed separately with `price-drafts.ts`
+
+---
+
+## Requirements
+
+- Node.js 20+  
+- Etsy Developer App
+- Etsy API Key / Keystring
+- Etsy Shared Secret
+- OAuth access to your own Etsy shop
+
+---
+
+## Installation
+
+```bash
+npm install
 ```
 
-Both are grouped as one digital product: `Yellow Alien Space Poster_Pip_Comet`. Spaces in filenames are fine.
+Create `.env` from the example:
 
-## Upgrade from v0.1
+```bash
+cp .env.example .env
+```
 
-Copy your existing `.env` and `.etsy-token.json` into this folder. Add:
+Example:
 
 ```dotenv
-DIGITAL_PRICE=4.49
-DIGITAL_FILES_DIR=./digital
+ETSY_API_KEY=your_keystring
+ETSY_SHARED_SECRET=your_shared_secret
+
+ETSY_REDIRECT_URI=http://localhost:3003/oauth/callback
+ETSY_SCOPES=shops_r listings_r listings_w
+
+POSTER_KEYWORDS=poster,wall art,nursery,print
+
+DIGITAL_PRICE=2.49
+DIGITAL_FILES_DIR=./originals
 DIGITAL_TITLE_SUFFIX= | Printable Wall Art | Digital Download
+
+# Important: do not use made_to_order for instant digital downloads.
+DIGITAL_WHEN_MADE=2020_2026
+
+DIGITAL_CONSTANT_TAGS=digital download,printable wall art,nursery printable,kids room decor
+
+# Optional
+DIGITAL_PREFERRED_TAGS=
+DIGITAL_BLOCKED_TAGS=kids room wall,kids room wall art,nursery and kids bedroom decor,alien cosmic
 ```
 
-## Scan
+---
+
+# Etsy OAuth
+
+Authenticate once:
 
 ```bash
-npm run digital:scan -- --dir ./digital
+npm run auth
 ```
 
-## Preview one physical listing
+The browser opens Etsy authorization.
+
+The token is stored locally in:
+
+```text
+.etsy-token.json
+```
+
+Do not commit `.env` or `.etsy-token.json`.
+
+Check the connected Etsy shop:
 
 ```bash
-npm run digital:preview -- --listing 1234567890 --dir ./digital
+npm run whoami
 ```
 
-If ambiguous:
+---
+
+# Read Etsy listings
+
+List all active listings:
 
 ```bash
-npm run digital:preview -- --listing 1234567890 --dir ./digital --group "Yellow Alien Space Poster_Pip_Comet"
+npm run list
 ```
 
-## Create one digital draft
+Find physical poster listings:
 
 ```bash
-npm run digital:create -- --listing 1234567890 --dir ./digital
+npm run posters
 ```
 
-It reuses the source listing images, creates a new digital **draft**, uploads every grouped file, and does not publish it.
+Exports are written to `out/`.
 
+---
 
-## v0.2.1 matching improvement
+# Local printable files
 
-The matcher now gives priority to the **main listing title before the first `|`**.
+Place the high-resolution files in a directory such as:
+
+```text
+originals/
+```
 
 Example:
 
 ```text
-Purple Alien Space Poster | Cute Alien & Cosmic Cat | Kids Room Wall Art | Galaxy Nursery Decor | Giggle Cosmos
+Purple Alien Space Poster_Nova_Luna_3x4_60x80cm_300dpi.jpg
+Purple Alien Space Poster_Nova_Luna_4x3_80x60cm_300dpi.jpg
+
+Yellow Alien Space Poster_Pip_Comet_3x4_60x80cm_300dpi.jpg
+Yellow Alien Space Poster_Pip_Comet_4x3_80x60cm_300dpi.jpg
 ```
 
-The script first extracts:
+Spaces in filenames are fine.
 
-```text
-Purple Alien Space Poster
-```
-
-and strongly prefers file groups that start with exactly that phrase, such as:
+The two Purple Alien files are grouped automatically into one digital product:
 
 ```text
 Purple Alien Space Poster_Nova_Luna
 ```
 
-This fixes cases where a generic word-overlap matcher would otherwise confuse it with something like `Cute Alien Space Poster_Milo_Cosmo`.
+The tool recognizes suffixes such as:
 
-# v0.3 additions
+```text
+_3x4_60x80cm_300dpi
+_4x3_80x60cm_300dpi
+_2x3_40x60cm_300dpi
+_4x5_40x50cm_300dpi
+_portrait
+_landscape
+_vertical
+_horizontal
+_hochformat
+_querformat
+```
 
-## Better digital titles
+---
 
-The title generator now keeps the complete digital suffix and removes lower-priority source-title segments when necessary. It never deliberately cuts `Digital Download` in the middle.
+# Scan local files
 
-Example source:
+```bash
+npm run digital:scan -- --dir ./originals
+```
+
+Example:
+
+```text
+✓ Purple Alien Space Poster_Nova_Luna
+  - Purple Alien Space Poster_Nova_Luna_3x4_60x80cm_300dpi.jpg
+  - Purple Alien Space Poster_Nova_Luna_4x3_80x60cm_300dpi.jpg
+```
+
+---
+
+# Matching logic
+
+For Etsy titles such as:
 
 ```text
 Purple Alien Space Poster | Cute Alien & Cosmic Cat | Kids Room Wall Art | Galaxy Nursery Decor | Giggle Cosmos
 ```
 
-Typical generated title:
+the matcher first uses the main title:
 
 ```text
-Purple Alien Space Poster | Cute Alien & Cosmic Cat | Galaxy Nursery Decor | Printable Wall Art | Digital Download
+Purple Alien Space Poster
 ```
 
-## Preview every physical poster in one command
-
-```bash
-npm run digital:preview-all -- --dir ./originals
-```
-
-The table shows:
-
-- Etsy listing ID
-- matching status
-- match score and gap to the second-best match
-- local file group
-- number of files
-- generated digital title
-
-Statuses:
-
-- `READY`: safe automatic match
-- `AMBIGUOUS`: needs manual review
-- `GROUP_REUSED`: same local group matched multiple Etsy listings
-- `EXISTS`: a listing with the generated digital title already exists
-
-## Create all safe matches in one run
-
-First inspect the plan:
-
-```bash
-npm run digital:create-all -- --dir ./originals
-```
-
-This still writes nothing.
-
-Then create all `READY` listings as Etsy drafts:
-
-```bash
-npm run digital:create-all -- --dir ./originals --confirm
-```
-
-The batch continues if one listing fails and prints a result table at the end. No listing is automatically published.
-
-## Single-listing commands are unchanged
-
-```bash
-npm run digital:preview -- --listing 4589225523 --dir ./originals
-npm run digital:create  -- --listing 4589225523 --dir ./originals
-```
-
-The single create command also guards against accidentally creating the same generated digital title twice. Use `--force` only if a duplicate is intentional.
-
-
-## v0.3.1 — descriptions and tags
-
-Digital drafts no longer copy the physical printing/shipping text blindly.
-
-### Description conversion
-
-Given a physical description like:
+and strongly prefers:
 
 ```text
-[unique artwork description]
-
-Perfect for:
-- ...
-
-Print details
-[physical paper / printing / shipping / available sizes]
+Purple Alien Space Poster_Nova_Luna
 ```
 
-v0.3.1 keeps everything before `Print details`, then replaces the rest with a digital-specific block containing:
+over unrelated groups such as:
 
-- the number of downloadable files
-- detected aspect ratio/orientation and maximum size from filenames
-- download/printing instructions
-- no-physical-item notice
-- frame/color/personal-use notes
-
-### Generated tags
-
-The original tags are not copied. Up to 13 new tags are generated from:
-
-1. Etsy title phrases
-2. useful phrases in the `Perfect for` bullets
-3. fixed digital tags from `.env`
-
-Default constants:
-
-```dotenv
-DIGITAL_CONSTANT_TAGS=digital download,printable wall art,nursery printable,kids room decor
+```text
+Cute Alien Space Poster_Milo_Cosmo
 ```
 
-Each generated tag is limited to Etsy's 20-character tag length.
+If matching is not clear enough, the script refuses to guess.
 
-`digital:preview` now prints the generated title, tags and complete new description before anything is written to Etsy.
-
-
-## v0.3.2 tag improvements
-
-- avoids low-quality near-duplicate tags such as `kids room wall`
-- adds stronger theme-aware tags when relevant, for example `space nursery decor`, `galaxy nursery decor`, `alien nursery art`
-- suppresses blocked tags via `.env` with `DIGITAL_BLOCKED_TAGS`
-- lets you prioritize niche tags via `.env` with `DIGITAL_PREFERRED_TAGS`
-
-
-## v0.3.3 fix
-
-- fixes Etsy listing-image retrieval endpoint used by batch creation
-- `getListingImages` now calls `/application/listings/{listing_id}/images`
-- batch failures now report the processing stage, e.g. `loading listing images`, `creating Etsy draft`, or `uploading digital files`
-
-
-## v0.3.4 upload fix
-
-Etsy requires a separate multipart `name` field when uploading a new digital listing file. v0.3.4 now sends `file`, `name`, and `rank` for each file.
-
-If v0.3.3 already created a draft before the upload failed, inspect Etsy drafts before retrying to avoid keeping an orphan draft.
-
-
-## v0.3.5: resume failed draft uploads
-
-If Etsy created a draft but a later file upload failed, do **not** create another draft. Resume the existing one:
+Manual override:
 
 ```bash
-npm run digital:resume -- \
+npm run digital:preview -- \
+  --listing 4589225523 \
+  --dir ./originals \
+  --group "Purple Alien Space Poster_Nova_Luna"
+```
+
+---
+
+# Preview one digital listing
+
+```bash
+npm run digital:preview -- \
   --listing 4589225523 \
   --dir ./originals
 ```
 
-The command derives the expected digital title, searches your Etsy drafts, and uploads the grouped files to the matching draft.
+Nothing is changed on Etsy.
 
-If more than one matching draft exists, it refuses to guess and prints their IDs. Pick one explicitly:
+The preview shows:
+
+- source listing
+- matched local files
+- generated digital title
+- price
+- generated tags
+- generated digital description
+
+---
+
+# Generated title
+
+The physical Etsy title is adapted for a digital listing.
+
+Example:
+
+```text
+Purple Alien Space Poster | Cute Alien & Cosmic Cat | Kids Room Wall Art | Galaxy Nursery Decor | Printable Wall Art | Digital Download
+```
+
+The tool keeps the title below Etsy's 140-character limit and avoids cutting words in half.
+
+---
+
+# Description conversion
+
+The unique artwork description is preserved.
+
+Everything starting at:
+
+```text
+Print details
+```
+
+is removed.
+
+For example, the physical print-specific parts are removed:
+
+- paper type
+- GSM
+- shipping
+- print-on-demand details
+- physical size selector
+- physical production notes
+
+They are replaced with a digital section such as:
+
+```text
+DIGITAL DOWNLOAD
+
+You will receive 2 high-resolution files.
+
+Included files:
+- 3:4 portrait — 60 × 80 cm — 300 dpi
+- 4:3 landscape — 80 × 60 cm — 300 dpi
+
+How to print
+- Download the files after purchase.
+- Print at home, at a local print shop, or upload the file to an online printing service.
+- Use the file with the aspect ratio matching the intended print size.
+- Files can be printed at the listed maximum size or smaller.
+
+Please note
+- This is a digital product. No physical item will be shipped.
+- Frame is not included.
+- Colors may vary depending on screen, printer, paper and print settings.
+- Digital files are for personal use unless otherwise stated in the shop terms.
+```
+
+---
+
+# Tag generation
+
+Tags are generated automatically from:
+
+- Etsy title
+- artwork description
+- `Perfect for` bullet points
+- theme detection
+- fixed digital tags
+
+The tool avoids weak/redundant tags such as:
+
+```text
+kids room wall
+```
+
+and can create stronger theme tags such as:
+
+```text
+alien nursery art
+space nursery decor
+galaxy nursery decor
+space poster
+purple alien
+cosmic cat
+kids room decor
+digital download
+printable wall art
+nursery printable
+```
+
+Maximum:
+
+```text
+13 tags
+```
+
+Each tag is limited to Etsy's maximum length.
+
+Optional `.env` tuning:
+
+```dotenv
+DIGITAL_PREFERRED_TAGS=space nursery decor,galaxy nursery decor,alien nursery art
+DIGITAL_BLOCKED_TAGS=kids room wall,kids room wall art,alien cosmic
+```
+
+---
+
+# Create one digital draft
+
+After checking the preview:
 
 ```bash
-npm run digital:resume -- \
+npm run digital:create -- \
   --listing 4589225523 \
-  --dir ./originals \
-  --draft 1234567890
+  --dir ./originals
 ```
 
-v0.3.5 also uploads grouped files with explicit ranks 1, 2, ... instead of giving every file the same rank.
+The command:
 
-## v0.3.6 digital finalization + verification
+1. reads the physical source listing
+2. finds the local printable files
+3. generates title
+4. generates description
+5. generates tags
+6. copies listing images
+7. creates a new Etsy draft
+8. configures it as a digital product
+9. uploads all associated files
+10. configures it as an **instant download**
+11. verifies the uploaded files
 
-After file upload the tool now:
+It does **not publish** the listing.
 
-1. PATCHes the Etsy listing with `type=download`.
-2. Reads the listing back.
-3. Reads `/shops/{shop_id}/listings/{listing_id}/files`.
-4. Verifies every expected filename is attached.
-5. Prints the files Etsy reports.
+---
 
-`digital:resume` also checks existing Etsy filenames first and skips them, so a previously successful upload is not duplicated.
+# Instant Download vs. "Made to order"
 
-For a draft that already has files but did not appear as digital in Etsy, run:
+This is important.
 
-```bash
-npm run digital:resume -- --listing SOURCE_LISTING_ID --dir ./originals
-```
-
-This will skip existing files, set the draft to `download`, and verify the final state.
-
-
-## v0.3.7 resume fix
-
-Etsy returns an empty file list for listings that are still marked physical. `digital:resume` now sets the existing draft to `type=download` before checking which files are already attached. This prevents duplicate-upload errors after an earlier upload succeeded but finalization failed.
-
-
-## v0.3.8 — Instant Download fix
-
-The physical Gelato/POD source listings can have:
+Physical POD listings often contain:
 
 ```text
 when_made=made_to_order
 ```
 
-Copying that value to a digital Etsy listing makes Etsy treat it as **"made to order" digital**, so uploaded files are not shown as an instant download.
+That value must **not** be copied to the digital listing.
 
-v0.3.8 fixes this by using:
+Otherwise Etsy enables:
+
+```text
+This digital item is made to order
+```
+
+and the uploaded files do not appear as normal instant-download files.
+
+Generated digital listings therefore use:
+
+```text
+type=download
+when_made=2020_2026
+is_supply=false
+```
+
+The year range can be configured:
 
 ```dotenv
 DIGITAL_WHEN_MADE=2020_2026
 ```
 
-for generated digital listings and by patching resumed drafts with:
+---
 
-- `type=download`
-- `when_made=2020_2026` (configurable)
-- `is_supply=false`
+# Resume an existing draft
 
-This means generated digital posters are configured as **instant-download digital items**, not made-to-order digital items.
-
-For an existing draft created by an earlier version, run:
+If a draft was already created but a later step failed:
 
 ```bash
 npm run digital:resume -- \
-  --listing <PHYSICAL_SOURCE_LISTING_ID> \
+  --listing 4589225523 \
   --dir ./originals
 ```
 
-The resume step repairs the digital mode and keeps/upload-verifies the files.
+Resume will:
 
+1. find the existing digital draft
+2. configure instant-download mode
+3. query existing files
+4. skip files already attached
+5. upload only missing files
+6. verify all files
 
-## v0.3.9 — Etsy filename normalization
+The script also accounts for Etsy changing filenames.
 
-Etsy may store an uploaded digital filename without spaces, for example:
+Example:
+
+Local:
 
 ```text
-Local:
 Purple Alien Space Poster_Nova_Luna_3x4_60x80cm_300dpi.jpg
+```
 
-Etsy:
+Etsy may store:
+
+```text
 PurpleAlienSpacePoster_Nova_Luna_3x4_60x80cm_300dpi.jpg
 ```
 
-The resume and verification logic now compare normalized filenames and ignore spaces,
-underscores and hyphens. Existing files are therefore recognized and are not uploaded twice.
+Spaces, `_` and `-` are ignored when comparing existing files.
+
+---
+
+# Preview all posters
+
+Before creating everything:
+
+```bash
+npm run digital:preview-all -- --dir ./originals
+```
+
+The batch preview shows all physical posters and their local matches.
+
+Possible statuses include:
+
+```text
+READY
+AMBIGUOUS
+GROUP_REUSED
+EXISTS
+```
+
+Only safe matches should be created automatically.
+
+---
+
+# Create all safe digital drafts
+
+After reviewing the batch preview:
+
+```bash
+npm run digital:create-all -- \
+  --dir ./originals \
+  --confirm
+```
+
+The batch processes all safe matches.
+
+A failure on one product does not stop the remaining products.
+
+No listing is automatically published.
+
+---
+
+# Change prices of digital drafts
+
+The separate helper:
+
+```text
+src/price-drafts.ts
+```
+
+can change the price of existing digital drafts without modifying descriptions, tags or files.
+
+Preview first:
+
+```bash
+npx tsx src/price-drafts.ts preview --price 2.49
+```
+
+Apply:
+
+```bash
+npx tsx src/price-drafts.ts update --price 2.49 --confirm
+```
+
+Only matching **draft listings** are changed.
+
+Published products are not modified.
+
+Listings that are already at the requested price are skipped.
+
+Current recommended launch price:
+
+```text
+2.49 €
+```
+
+---
+
+# Typical workflow
+
+For new physical posters:
+
+```bash
+npm run digital:preview-all -- --dir ./originals
+```
+
+Review the matches.
+
+Then:
+
+```bash
+npm run digital:create-all -- --dir ./originals --confirm
+```
+
+If something fails halfway:
+
+```bash
+npm run digital:resume -- \
+  --listing PHYSICAL_LISTING_ID \
+  --dir ./originals
+```
+
+If prices need adjusting later:
+
+```bash
+npx tsx src/price-drafts.ts preview --price 2.49
+npx tsx src/price-drafts.ts update --price 2.49 --confirm
+```
+
+---
+
+# Safety principles
+
+The scripts intentionally:
+
+- create drafts only
+- do not publish automatically
+- refuse ambiguous filename matches
+- prevent obvious duplicate digital drafts
+- detect reused file groups
+- skip already uploaded files during resume
+- require `--confirm` for batch creation and price updates
+- leave failed drafts unpublished for manual inspection
+
+---
+
+# Files that should never be committed
+
+```text
+.env
+.etsy-token.json
+node_modules/
+out/
+```
+
+Recommended `.gitignore`:
+
+```gitignore
+node_modules/
+.env
+.etsy-token.json
+out/
+dist/
+.DS_Store
+```
