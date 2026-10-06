@@ -1,6 +1,47 @@
 import { getAllShopListings, getMyShop, etsyFetch } from "./etsy.js";
 import type { EtsyListing } from "./types.js";
 
+type Money = {
+  amount: number;
+  divisor: number;
+  currency_code?: string;
+};
+
+type Offering = {
+  offering_id?: number;
+  quantity: number;
+  is_enabled: boolean;
+  is_deleted?: boolean;
+  price: Money | number;
+  readiness_state_id?: number | null;
+};
+
+type PropertyValue = {
+  property_id: number;
+  property_name?: string;
+  scale_id?: number | null;
+  scale_name?: string | null;
+  value_ids?: number[];
+  values?: string[];
+  value_pairs?: unknown;
+};
+
+type Product = {
+  product_id?: number;
+  sku?: string;
+  is_deleted?: boolean;
+  offerings: Offering[];
+  property_values?: PropertyValue[];
+};
+
+type Inventory = {
+  products: Product[];
+  price_on_property?: number[];
+  quantity_on_property?: number[];
+  sku_on_property?: number[];
+  readiness_state_on_property?: number[];
+};
+
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(name);
   return i >= 0 ? process.argv[i + 1] : undefined;
@@ -8,12 +49,6 @@ function arg(name: string): string | undefined {
 
 function hasFlag(name: string): boolean {
   return process.argv.includes(name);
-}
-
-function getPrice(listing: EtsyListing): number | undefined {
-  const p = listing.price;
-  if (!p) return undefined;
-  return p.amount / p.divisor;
 }
 
 function isDigitalDraft(listing: EtsyListing): boolean {
@@ -27,22 +62,85 @@ function isDigitalDraft(listing: EtsyListing): boolean {
   );
 }
 
-async function updatePrice(
-  shopId: number,
+function moneyToNumber(value: Money | number): number {
+  if (typeof value === "number") return value;
+  return value.amount / value.divisor;
+}
+
+function inventoryPrices(inv: Inventory): number[] {
+  return inv.products.flatMap(product =>
+    (product.offerings || []).map(offering => moneyToNumber(offering.price))
+  );
+}
+
+async function getInventory(listingId: number): Promise<Inventory> {
+  return etsyFetch<Inventory>(
+    `/application/listings/${listingId}/inventory`
+  );
+}
+
+function buildInventoryPayload(inv: Inventory, newPrice: number) {
+  const products = inv.products.map(product => ({
+    sku: product.sku ?? "",
+    property_values: (product.property_values || []).map(value => ({
+      property_id: value.property_id,
+      ...(value.property_name !== undefined
+        ? { property_name: value.property_name }
+        : {}),
+      scale_id: value.scale_id ?? null,
+      value_ids: value.value_ids || [],
+      values: value.values || [],
+    })),
+    offerings: (product.offerings || []).map(offering => ({
+      quantity: offering.quantity,
+      is_enabled: offering.is_enabled,
+      price: newPrice,
+      ...(offering.readiness_state_id != null
+        ? { readiness_state_id: offering.readiness_state_id }
+        : {}),
+    })),
+  }));
+
+  return {
+    products,
+    price_on_property: inv.price_on_property || [],
+    quantity_on_property: inv.quantity_on_property || [],
+    sku_on_property: inv.sku_on_property || [],
+    ...(inv.readiness_state_on_property !== undefined
+      ? { readiness_state_on_property: inv.readiness_state_on_property }
+      : {}),
+  };
+}
+
+async function updateInventoryPrice(
   listingId: number,
-  price: number,
+  inv: Inventory,
+  newPrice: number,
 ): Promise<void> {
-  const body = new URLSearchParams();
-  body.set("price", price.toFixed(2));
+  const payload = buildInventoryPayload(inv, newPrice);
 
   await etsyFetch(
-    `/application/shops/${shopId}/listings/${listingId}`,
+    `/application/listings/${listingId}/inventory`,
     {
-      method: "PATCH",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body,
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
     },
   );
+}
+
+function allPricesEqual(prices: number[], expected: number): boolean {
+  return (
+    prices.length > 0 &&
+    prices.every(price => Math.abs(price - expected) < 0.001)
+  );
+}
+
+function formatPrices(prices: number[]): string {
+  if (!prices.length) return "?";
+  return [...new Set(prices.map(p => p.toFixed(2)))].join(", ");
 }
 
 async function main() {
@@ -51,21 +149,20 @@ async function main() {
   if (!["preview", "update"].includes(mode || "")) {
     throw new Error(
       "Usage:\n" +
-      "  tsx src/price-drafts.ts preview --price 2.49\n" +
-      "  tsx src/price-drafts.ts update --price 2.49 --confirm"
+      "  npx tsx src/price-drafts-v2.ts preview --price 2.49\n" +
+      "  npx tsx src/price-drafts-v2.ts update --price 2.49 --confirm"
     );
   }
 
   const priceRaw = arg("--price") || "2.49";
-  const price = Number(priceRaw.replace(",", "."));
+  const newPrice = Number(priceRaw.replace(",", "."));
 
-  if (!Number.isFinite(price) || price <= 0) {
+  if (!Number.isFinite(newPrice) || newPrice <= 0) {
     throw new Error(`Invalid --price value: ${priceRaw}`);
   }
 
   const shop = await getMyShop();
   const drafts = await getAllShopListings(shop.shop_id, "draft");
-
   const targets = drafts.filter(isDigitalDraft);
 
   if (!targets.length) {
@@ -73,16 +170,37 @@ async function main() {
     return;
   }
 
-  console.table(
-    targets.map(x => ({
-      id: x.listing_id,
-      currentPrice: getPrice(x)?.toFixed(2) ?? "?",
-      newPrice: price.toFixed(2),
-      title: x.title.length > 85 ? x.title.slice(0, 82) + "..." : x.title,
-    })),
-  );
+  console.log(`Found ${targets.length} digital draft(s).\n`);
 
-  console.log(`\n${targets.length} digital draft(s) matched.`);
+  const rows: Array<{
+    id: number;
+    currentPrice: string;
+    newPrice: string;
+    offerings: number;
+    title: string;
+  }> = [];
+
+  const inventories = new Map<number, Inventory>();
+
+  for (const listing of targets) {
+    const inv = await getInventory(listing.listing_id);
+    inventories.set(listing.listing_id, inv);
+
+    const prices = inventoryPrices(inv);
+
+    rows.push({
+      id: listing.listing_id,
+      currentPrice: formatPrices(prices),
+      newPrice: newPrice.toFixed(2),
+      offerings: prices.length,
+      title:
+        listing.title.length > 70
+          ? listing.title.slice(0, 67) + "..."
+          : listing.title,
+    });
+  }
+
+  console.table(rows);
 
   if (mode === "preview") {
     console.log("\nPreview only. Nothing was changed.");
@@ -91,53 +209,75 @@ async function main() {
 
   if (!hasFlag("--confirm")) {
     throw new Error(
-      "No prices changed. Add --confirm after checking the preview."
+      "No prices changed. Run preview first, then add --confirm."
     );
   }
 
   const results: Array<{
     id: number;
-    title: string;
     result: string;
+    verifiedPrice: string;
   }> = [];
 
   for (const listing of targets) {
     try {
-      const oldPrice = getPrice(listing);
+      const inv = inventories.get(listing.listing_id);
 
-      if (oldPrice !== undefined && Math.abs(oldPrice - price) < 0.001) {
+      if (!inv) {
+        throw new Error("Inventory was not loaded.");
+      }
+
+      if (!inv.products?.length) {
+        throw new Error("Listing has no inventory products.");
+      }
+
+      const beforePrices = inventoryPrices(inv);
+
+      if (allPricesEqual(beforePrices, newPrice)) {
         results.push({
           id: listing.listing_id,
-          title: listing.title,
-          result: `SKIPPED: already ${price.toFixed(2)}`,
+          result: "SKIPPED: already correct",
+          verifiedPrice: formatPrices(beforePrices),
         });
         continue;
       }
 
-      await updatePrice(shop.shop_id, listing.listing_id, price);
+      console.log(
+        `Updating ${listing.listing_id}: ${formatPrices(beforePrices)} -> ${newPrice.toFixed(2)}`
+      );
+
+      await updateInventoryPrice(listing.listing_id, inv, newPrice);
+
+      const verified = await getInventory(listing.listing_id);
+      const afterPrices = inventoryPrices(verified);
+
+      if (!allPricesEqual(afterPrices, newPrice)) {
+        throw new Error(
+          `Verification failed. Etsy inventory now reports: ${formatPrices(afterPrices)}`
+        );
+      }
 
       results.push({
         id: listing.listing_id,
-        title: listing.title,
-        result: `UPDATED: ${oldPrice?.toFixed(2) ?? "?"} -> ${price.toFixed(2)}`,
+        result: "UPDATED + VERIFIED",
+        verifiedPrice: formatPrices(afterPrices),
       });
     } catch (err) {
       results.push({
         id: listing.listing_id,
-        title: listing.title,
         result: `FAILED: ${err instanceof Error ? err.message : String(err)}`,
+        verifiedPrice: "-",
       });
     }
   }
 
   console.log("\nPRICE UPDATE RESULT");
-  console.table(
-    results.map(r => ({
-      id: r.id,
-      title: r.title.length > 55 ? r.title.slice(0, 52) + "..." : r.title,
-      result: r.result,
-    })),
-  );
+  console.table(results);
+
+  const failed = results.filter(r => r.result.startsWith("FAILED"));
+  if (failed.length) {
+    process.exitCode = 1;
+  }
 }
 
 main().catch(err => {
