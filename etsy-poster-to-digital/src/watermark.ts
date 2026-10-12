@@ -1,19 +1,15 @@
 import "dotenv/config";
 import { mkdir, readFile, writeFile, rename, open, unlink } from "node:fs/promises";
 import { resolve, join } from "node:path";
-import { config } from "./config.js";
 import { etsyFetch, getMyShop, getAllShopListings, getListing, getListingImages } from "./etsy.js";
 import { watermarkImage, validateStyle } from "./watermark-image.js";
-import type { EtsyListing, EtsyListingImage } from "./types.js";
+import type { EtsyListingImage } from "./types.js";
 
 type Entry = { listingId: number; title: string; originalId: number; rank: number; altText?: string; original: string; preview: string; status: "prepared" | "pending" | "applied" | "restoring" | "restored"; newId?: number };
 type Manifest = { version: 1; shopId: number; text: string; opacity: number; entries: Entry[] };
 const args = process.argv.slice(2);
 function arg(key: string) { const i = args.indexOf(key); if (i < 0) return undefined; const v = args[i+1]; if (!v || v.startsWith("--")) throw new Error(`Missing value for ${key}`); return v; }
 const states = ["active", "draft", "inactive", "expired", "sold_out"] as const;
-export function isDigitalPoster(l: EtsyListing, allDigital = false) {
-  return (l.listing_type || l.type) === "download" && (allDigital || config.posterKeywords.some(k => `${l.title} ${(l.tags || []).join(" ")}`.toLowerCase().includes(k)));
-}
 async function upload(shop: number, e: Entry, path: string) {
   const form = new FormData();
   form.append("image", new Blob([await readFile(path)], { type: path.endsWith(".jpg") ? "image/jpeg" : "application/octet-stream" }), "preview.jpg");
@@ -22,13 +18,13 @@ async function upload(shop: number, e: Entry, path: string) {
   return etsyFetch<EtsyListingImage>(`/application/shops/${shop}/listings/${e.listingId}/images`, { method: "POST", body: form });
 }
 async function main() {
-  const allowed = new Set(["--dir", "--listing", "--text", "--opacity", "--all-digital", "--state", "--limit", "--help"]);
+  const allowed = new Set(["--dir", "--listing", "--text", "--opacity", "--state", "--limit", "--help"]);
   for (let i = 1; i < args.length; i++) {
     if (!allowed.has(args[i])) throw new Error(`Unknown option: ${args[i]}`);
-    if (!["--all-digital", "--help"].includes(args[i])) { arg(args[i]); i++; }
+    if (!["--help"].includes(args[i])) { arg(args[i]); i++; }
   }
   const command = args[0];
-  if (!command || command === "--help") { console.log("watermark: prepare | apply | restore [--dir out/watermark] [--listing ID] [--text GigglingHome] [--opacity 0.14] [--all-digital] [--state active,draft] [--limit N]"); return; }
+  if (!command || command === "--help") { console.log("watermark: prepare | apply | restore [--dir out/watermark] [--listing ID] [--text GigglingHome] [--opacity 0.14] [--state active,draft] [--limit N]"); return; }
   if (!["prepare", "apply", "restore"].includes(command)) throw new Error("Unknown command");
   const dir = resolve(arg("--dir") || "out/watermark");
   await mkdir(dir, { recursive: true });
@@ -40,6 +36,14 @@ async function main() {
     try { m = JSON.parse(await readFile(file, "utf8")); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
     const save = async () => { await writeFile(file + ".tmp", JSON.stringify(m, null, 2)); await rename(file + ".tmp", file); };
     const shop = await getMyShop();
+    const sections = await etsyFetch<{ results: Array<{ title: string; shop_section_id: number }> }>(`/application/shops/${shop.shop_id}/sections`);
+    const allowedSections = new Set<number>();
+    for (const name of ["Poster", "Poster-Digital"]) {
+      const matches = sections.results.filter(section => section.title.trim() === name);
+      if (matches.length !== 1 || !Number.isSafeInteger(matches[0].shop_section_id) || matches[0].shop_section_id <= 0) throw new Error(`Shop section "${name}" was not found uniquely. No images changed.`);
+      allowedSections.add(matches[0].shop_section_id);
+    }
+    console.log("Watermark scope: Poster, Poster-Digital");
     if (command === "prepare") {
       if (m) throw new Error("This directory already contains a manifest. Use apply or a new --dir; keep earlier backups.");
       const text = arg("--text") || process.env.WATERMARK_TEXT || "GigglingHome";
@@ -49,8 +53,8 @@ async function main() {
       const selectedStates = (arg("--state") || states.join(",")).split(",");
       if (selectedStates.some(s => !states.includes(s as typeof states[number]))) throw new Error("Invalid state");
       const listings = id ? [await getListing(Number(id))] : (await Promise.all(selectedStates.map(s => getAllShopListings(shop.shop_id, s as typeof states[number])))).flat();
-      const selected = [...new Map(listings.map(l => [l.listing_id, l])).values()].filter(l => l.shop_id === shop.shop_id && isDigitalPoster(l, args.includes("--all-digital")));
-      if (id && !selected.length) throw new Error("Listing is not a digital poster in your shop (use --all-digital for other digital products).");
+      const selected = [...new Map(listings.map(l => [l.listing_id, l])).values()].filter(l => l.shop_id === shop.shop_id && allowedSections.has(l.shop_section_id ?? -1));
+      if (id && !selected.length) throw new Error("Listing is not in Poster or Poster-Digital in your shop.");
       m = { version: 1, shopId: shop.shop_id, text, opacity, entries: [] };
       // No remote writes: all originals and previews must exist before manifest is committed.
       for (const l of selected) {
@@ -78,7 +82,7 @@ async function main() {
       if (command === "apply" ? e.status !== "prepared" : e.status !== "applied") continue;
       if (count >= limit) break;
       const live = await getListing(e.listingId);
-      if (live.shop_id !== shop.shop_id || (live.listing_type || live.type) !== "download") throw new Error("Listing ownership/type changed");
+      if (live.shop_id !== shop.shop_id || !allowedSections.has(live.shop_section_id ?? -1)) throw new Error("Listing ownership/section changed; only Poster and Poster-Digital are allowed.");
       const images = await getListingImages(shop.shop_id, e.listingId);
       const expected = command === "apply" ? e.originalId : e.newId;
       if (images.find(i => i.rank === e.rank)?.listing_image_id !== expected) throw new Error(`Image at rank ${e.rank} changed in listing ${e.listingId}; stopping.`);

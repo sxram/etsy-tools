@@ -596,15 +596,13 @@ Voraussetzung: Node.js 22 oder neuer, `npm install`, bestehende `.env` und Etsy-
 npm run watermark:prepare
 ```
 
-Liest sämtliche Seiten aller Listing-Zustände (active, draft, inactive, expired, sold_out). Wählt digitale Listings (`download`) anhand der vorhandenen `POSTER_KEYWORDS`. Verarbeitet **alle Vorschaubilder** dieser Listings, nicht nur das Titelbild. Prüfe vor dem Upload die ausgegebenen Listing-IDs und die JPGs unter `out/watermark/<listing-id>/`.
+Liest sämtliche Seiten aller Listing-Zustände (active, draft, inactive, expired, sold_out). Wählt ausschließlich Artikel in den Shop-Bereichen `Poster` und `Poster-Digital` anhand ihrer `shop_section_id`, unabhängig von Titel oder Produkttyp. Beide Bereiche müssen eindeutig vorhanden sein. Verarbeitet **alle Vorschaubilder** dieser Listings, nicht nur das Titelbild. Prüfe vor dem Upload die ausgegebenen Listing-IDs und die JPGs unter `out/watermark/<listing-id>/`.
 
-Originale werden unverändert als `*-original.bin` gesichert (Bilddateien mit neutraler Endung), Vorschauen als `*-watermarked.jpg`. Maximal 2400 Pixel an der längsten Seite, kein Hochskalieren. Standard: wiederholter diagonaler Text „GigglingHome“, Deckkraft 0.22. Dies erschwert das Kopieren; vollständigen Schutz bietet ein Wasserzeichen nicht.
+Originale werden unverändert als `*-original.bin` gesichert (Bilddateien mit neutraler Endung), Vorschauen als `*-watermarked.jpg`. Maximal 2400 Pixel an der längsten Seite, kein Hochskalieren. Standard: ein einzelner Schriftzug „GigglingHome“ im rechten mittleren Bildteil, um 18° geneigt, Deckkraft 0.14. Seine Breite beträgt ungefähr 35–45 % der Bildbreite, abhängig von Text und Schrift. Dies erschwert das Kopieren; vollständigen Schutz bietet ein Wasserzeichen nicht.
 
 ```bash
-npm run watermark:prepare -- --listing 123456789 --text "GigglingHome" --opacity 0.25
+npm run watermark:prepare -- --listing 123456789 --text "GigglingHome" --opacity 0.14
 npm run watermark:prepare -- --state active,draft --dir out/watermark-run-2
-# Optional: sämtliche digitalen Produkte, ohne Poster-Stichwortfilter
-npm run watermark:prepare -- --all-digital
 ```
 
 `WATERMARK_TEXT` und `WATERMARK_OPACITY` können alternativ in `.env` stehen. CLI-Werte haben Vorrang. Für jeden neuen Vorbereitungslauf einen neuen `--dir` verwenden; bestehende Manifeste werden nicht überschrieben.
@@ -653,6 +651,16 @@ npx tsx src/price-drafts.ts preview --state active --price 2.99
 npx tsx src/price-drafts.ts update --state active --price 2.99 --confirm
 ```
 
-Der Preis gilt in der Shop-Währung. Es werden alle passenden Listings und alle ihre Inventory-Angebote auf denselben Preis gesetzt. Der bestehende Filter erkennt digitale Produkte über `type`/`listing_type=download` oder die Titelwörter „digital download“ bzw. „printable wall art“. Prüfe deshalb die Vorschautabelle. Bereits passende Preise werden übersprungen; Änderungen werden erneut aus Etsy gelesen und verifiziert. Der Listing-Zustand wird nicht geändert.
+Der Preis gilt in der Shop-Währung. Es werden alle passenden Listings und alle ihre Inventory-Angebote auf denselben Preis gesetzt. Es werden ausschließlich Artikel im Shop-Bereich **Poster-Digital** ausgewählt, anhand seiner Etsy-`shop_section_id`. Titelwörter und Produkttyp dienen nicht mehr als Auswahlfilter. Fehlt der eindeutig benannte Bereich, bricht der Lauf ohne Preisänderung ab. Prüfe deshalb die Vorschautabelle. Bereits passende Preise werden übersprungen; Änderungen werden erneut aus Etsy gelesen und verifiziert. Der Listing-Zustand wird nicht geändert.
 
 Nur `draft` und `active` sind zulässig. Eine unbekannte Angabe führt zum Abbruch.
+
+Für Preisänderungen gilt ab jetzt immer der Shop-Bereich `Poster-Digital`, sowohl bei `--state active` als auch bei Entwürfen. Vor jedem Preis-Upload wird die aktuelle Bereichszuordnung und der Zustand erneut geprüft. Ältere Hinweise auf eine Auswahl über digitale Titelwörter gelten für dieses Skript nicht mehr.
+
+### Dezentes Wasserzeichen
+
+Der neue Standard ersetzt das wiederholte Muster durch einen einzelnen Schriftzug. Falls in deiner bestehenden `.env` noch `WATERMARK_OPACITY=0.22` steht, ändere es auf `0.14` oder verwende `--opacity 0.14`. Bereits vorbereitete JPGs ändern sich durch ein Code-Update nicht. Vor dem ersten Upload kannst du eine neue Vorbereitung in einem anderen Ordner durchführen. Bereits auf Etsy markierte Bilder zuerst mit dem alten Manifest und `watermark:restore` zurückspielen; danach einen neuen Vorbereitungslauf durchführen. Sonst würde das neue Wasserzeichen zusätzlich über das alte gesetzt. Die Position bezieht sich auf das gesamte Mockup; kontrolliere deshalb, ob der Schriftzug auch das darin abgebildete Poster trifft.
+
+### Wasserzeichen nur für Poster-Bereiche
+
+Die feste Auswahl umfasst ausschließlich die Shop-Bereiche `Poster` und `Poster-Digital`, einschließlich physischer Poster. Sie gilt bei Vorbereitung, Upload und Wiederherstellung, auch mit `--listing` oder einem älteren Manifest. Vor jedem Upload wird die aktuelle Bereichszuordnung geprüft. `--all-digital` wurde entfernt und wird als unbekannte Option abgewiesen. Es werden weiterhin alle Vorschaubilder der ausgewählten Artikel verarbeitet.

@@ -24,7 +24,8 @@ let uploaded = false;
 globalThis.fetch = async (url, options) => {
  const u = String(url); let data;
  if (u.endsWith('/users/123/shops')) data = { shop_id: 7 };
- else if (u.endsWith('/listings/8?includes=Images')) data = { shop_id: 7, listing_type: 'download' };
+ else if (u.endsWith('/shops/7/sections')) data = { results: [{ title: 'Poster', shop_section_id: 20 }, { title: 'Poster-Digital', shop_section_id: 21 }] };
+ else if (u.endsWith('/listings/8?includes=Images')) data = { shop_id: 7, listing_type: 'physical', shop_section_id: process.env.MODE === 'outside' ? 99 : 20 };
  else if (u.endsWith('/listings/8/images') && options?.method === 'POST') {
   if (process.env.MODE !== 'apply') throw new Error('Unexpected upload');
   if (options.body.get('rank') !== '1' || options.body.get('overwrite') !== 'true' || !options.body.get('image')) throw new Error('Invalid multipart upload');
@@ -43,6 +44,7 @@ await import(${JSON.stringify(target)});
   const stored = JSON.parse(await readFile(path, "utf8")); assert.equal(stored.entries[0].status, "applied"); assert.equal(stored.entries[0].newId, 10);
   assert.equal(execute("skip").status, 0);
   await writeFile(path, JSON.stringify(manifest));
+  const outside = execute("outside"); assert.equal(outside.status, 1); assert.match(outside.stderr, /only Poster and Poster-Digital/);
   const changed = execute("changed"); assert.equal(changed.status, 1); assert.match(changed.stderr, /changed/);
   const unchanged = JSON.parse(await readFile(path, "utf8")); assert.equal(unchanged.entries[0].status, "prepared");
  } finally { await rm(dir, { recursive: true, force: true }); }
