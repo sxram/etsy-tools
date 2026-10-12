@@ -1,5 +1,4 @@
-import { getAllShopListings, getMyShop, etsyFetch } from "./etsy.js";
-import type { EtsyListing } from "./types.js";
+import { getAllShopListings, getMyShop, getListing, etsyFetch } from "./etsy.js";
 
 type Money = {
   amount: number;
@@ -49,17 +48,6 @@ function arg(name: string): string | undefined {
 
 function hasFlag(name: string): boolean {
   return process.argv.includes(name);
-}
-
-function isDigitalDraft(listing: EtsyListing): boolean {
-  const type = (listing.type || listing.listing_type || "").toLowerCase();
-  const title = listing.title.toLowerCase();
-
-  return (
-    type === "download" ||
-    title.includes("digital download") ||
-    title.includes("printable wall art")
-  );
 }
 
 function moneyToNumber(value: Money | number): number {
@@ -149,10 +137,17 @@ async function main() {
   if (!["preview", "update"].includes(mode || "")) {
     throw new Error(
       "Usage:\n" +
-      "  npx tsx src/price-drafts-v2.ts preview --price 2.49\n" +
-      "  npx tsx src/price-drafts-v2.ts update --price 2.49 --confirm"
+      "  npx tsx src/price-drafts.ts preview --price 2.49 [--state draft|active]\n" +
+      "  npx tsx src/price-drafts.ts update --price 2.49 [--state draft|active] --confirm"
     );
   }
+
+  if (hasFlag("--state") && !arg("--state")) throw new Error("Missing value for --state.");
+  const stateRaw = arg("--state") ?? "draft";
+  if (stateRaw !== "draft" && stateRaw !== "active") {
+    throw new Error("--state must be draft or active (default: draft).");
+  }
+  const state = stateRaw;
 
   const priceRaw = arg("--price") || "2.49";
   const newPrice = Number(priceRaw.replace(",", "."));
@@ -162,15 +157,24 @@ async function main() {
   }
 
   const shop = await getMyShop();
-  const drafts = await getAllShopListings(shop.shop_id, "draft");
-  const targets = drafts.filter(isDigitalDraft);
+  const sections = await etsyFetch<{ results: Array<{ shop_section_id: number; title: string }> }>(
+    `/application/shops/${shop.shop_id}/sections`
+  );
+  const matches = sections.results.filter(section => section.title.trim() === "Poster-Digital");
+  if (matches.length !== 1 || !Number.isSafeInteger(matches[0].shop_section_id) || matches[0].shop_section_id <= 0) {
+    throw new Error('Shop section "Poster-Digital" was not found uniquely. No prices changed.');
+  }
+  const sectionId = matches[0].shop_section_id;
+  const listings = await getAllShopListings(shop.shop_id, state);
+  const targets = listings.filter(listing => listing.shop_section_id === sectionId);
+  console.log(`Shop section: Poster-Digital (${sectionId}), state: ${state}`);
 
   if (!targets.length) {
-    console.log("No matching digital draft listings found.");
+    console.log(`No ${state} listings in Poster-Digital found.`);
     return;
   }
 
-  console.log(`Found ${targets.length} digital draft(s).\n`);
+  console.log(`Found ${targets.length} ${state} listing(s) in Poster-Digital.\n`);
 
   const rows: Array<{
     id: number;
@@ -246,6 +250,10 @@ async function main() {
         `Updating ${listing.listing_id}: ${formatPrices(beforePrices)} -> ${newPrice.toFixed(2)}`
       );
 
+      const current = await getListing(listing.listing_id);
+      if (current.shop_id !== shop.shop_id || current.shop_section_id !== sectionId || current.state !== state) {
+        throw new Error('Listing shop, section or state changed. Price update skipped.');
+      }
       await updateInventoryPrice(listing.listing_id, inv, newPrice);
 
       const verified = await getInventory(listing.listing_id);

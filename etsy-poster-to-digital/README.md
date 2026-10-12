@@ -585,3 +585,74 @@ out/
 dist/
 .DS_Store
 ```
+
+## Wasserzeichen für Etsy-Vorschaubilder (v0.4.0)
+
+Voraussetzung: Node.js 22 oder neuer, `npm install`, bestehende `.env` und Etsy-Anmeldung mit `listings_r`, `listings_w`, `shops_r`. Die bisherigen Befehle bleiben erhalten.
+
+### 1. Vorschauen und Original-Backups erstellen
+
+```bash
+npm run watermark:prepare
+```
+
+Liest sämtliche Seiten aller Listing-Zustände (active, draft, inactive, expired, sold_out). Wählt digitale Listings (`download`) anhand der vorhandenen `POSTER_KEYWORDS`. Verarbeitet **alle Vorschaubilder** dieser Listings, nicht nur das Titelbild. Prüfe vor dem Upload die ausgegebenen Listing-IDs und die JPGs unter `out/watermark/<listing-id>/`.
+
+Originale werden unverändert als `*-original.bin` gesichert (Bilddateien mit neutraler Endung), Vorschauen als `*-watermarked.jpg`. Maximal 2400 Pixel an der längsten Seite, kein Hochskalieren. Standard: wiederholter diagonaler Text „GigglingHome“, Deckkraft 0.22. Dies erschwert das Kopieren; vollständigen Schutz bietet ein Wasserzeichen nicht.
+
+```bash
+npm run watermark:prepare -- --listing 123456789 --text "GigglingHome" --opacity 0.25
+npm run watermark:prepare -- --state active,draft --dir out/watermark-run-2
+# Optional: sämtliche digitalen Produkte, ohne Poster-Stichwortfilter
+npm run watermark:prepare -- --all-digital
+```
+
+`WATERMARK_TEXT` und `WATERMARK_OPACITY` können alternativ in `.env` stehen. CLI-Werte haben Vorrang. Für jeden neuen Vorbereitungslauf einen neuen `--dir` verwenden; bestehende Manifeste werden nicht überschrieben.
+
+### 2. Erst ein Bild testen, danach alle ersetzen
+
+```bash
+npm run watermark:apply -- --limit 1
+# Ergebnis auf Etsy prüfen, danach Rest fortsetzen:
+npm run watermark:apply
+```
+
+Etsy `uploadListingImage` wird mit `rank` und `overwrite=true` verwendet. Es wird kein Bild vorher gelöscht. Anzahl, Reihenfolge und IDs der übrigen Bilder werden nach jedem Upload geprüft; bei Abweichungen stoppt der Lauf. Alt-Text wird übernommen. Alle Uploads laufen nacheinander. Es werden keine Listings veröffentlicht und keine digitalen Käufer-Download-Dateien verändert.
+
+Das Manifest `out/watermark/manifest.json` speichert den Fortschritt. Erfolgreiche Bilder werden bei einem erneuten Lauf übersprungen. Nach einem Upload-Timeout, Prozessabbruch oder einer fehlgeschlagenen Verifikation bleibt der Eintrag `pending` bzw. `restoring`: der nächste Lauf stoppt, damit kein zweites Wasserzeichen entsteht. In diesem Fall Etsy mit dem Backup und Manifest vergleichen. Ist nichts geändert worden, Status wieder `prepared` (bzw. `applied` bei Restore) setzen. Ist der Upload gelungen, tatsächliche neue Etsy-Bild-ID unter `newId` und Status `applied` (bzw. `restored`) eintragen. Bei geänderter Reihenfolge erst die Etsy-Galerie korrigieren. `.lock` nach einem Prozessabbruch nur entfernen, wenn kein Lauf mehr aktiv ist.
+
+Nicht gleichzeitig im Etsy-Editor oder durch andere Tools dieselben Bilder bearbeiten. `overwrite` ist keine Transaktion; bei unerwartetem API-Verhalten ist manuelle Kontrolle erforderlich. Backups und Manifest zusammen dauerhaft aufbewahren. Nicht nach einem erfolgreichen Lauf erneut in einem neuen Ordner vorbereiten: bereits markierte Etsy-Bilder würden nochmals markiert.
+
+### Originale zurückspielen
+
+```bash
+npm run watermark:restore
+# oder nur ein Listing:
+npm run watermark:restore -- --listing 123456789
+```
+
+Ersetzt erfolgreich markierte Bilder durch die lokal gesicherten Originale, nachdem die aktuelle Bild-ID überprüft wurde. Andere zwischenzeitliche Bildänderungen führen zum Stopp. Bei abweichendem Ausgabeordner bei **jedem** Befehl denselben `--dir` angeben.
+
+### Prüfung
+
+```bash
+npm run typecheck
+npm run test:watermark
+```
+
+API-Referenz: https://developer.etsy.com/documentation/reference/#operation/uploadListingImage
+
+## Preise aktiver digitaler Artikel ändern
+
+`price-drafts.ts` unterstützt jetzt `--state active`. Ohne diesen Parameter werden weiterhin ausschließlich Entwürfe ausgewählt.
+
+```bash
+# Vorschau: alle passenden aktiven digitalen Artikel
+npx tsx src/price-drafts.ts preview --state active --price 2.99
+# Änderungen nach Prüfung der Tabelle ausführen
+npx tsx src/price-drafts.ts update --state active --price 2.99 --confirm
+```
+
+Der Preis gilt in der Shop-Währung. Es werden alle passenden Listings und alle ihre Inventory-Angebote auf denselben Preis gesetzt. Der bestehende Filter erkennt digitale Produkte über `type`/`listing_type=download` oder die Titelwörter „digital download“ bzw. „printable wall art“. Prüfe deshalb die Vorschautabelle. Bereits passende Preise werden übersprungen; Änderungen werden erneut aus Etsy gelesen und verifiziert. Der Listing-Zustand wird nicht geändert.
+
+Nur `draft` und `active` sind zulässig. Eine unbekannte Angabe führt zum Abbruch.

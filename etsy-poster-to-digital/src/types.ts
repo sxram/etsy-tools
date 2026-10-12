@@ -16,6 +16,7 @@ export type EtsyListingImage = {
   listing_image_id: number;
   rank?: number;
   url_fullxfull?: string;
+  alt_text?: string;
 };
 
 export type EtsyListing = {
