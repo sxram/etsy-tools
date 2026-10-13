@@ -15,8 +15,8 @@ test("preserves entire portrait and landscape including border; leaves source un
    assert.deepEqual(await readFile(src),original);
    const m=await sharp(out).metadata();assert.equal(m.width,2400);assert.equal(m.height,2400);
    const {data}=await sharp(out).raw().toBuffer({resolveWithObject:true});
-   const ratio=(w+20)/(h+20), height=Math.round(Math.min(1720,1800/ratio)), width=Math.round(height*ratio);
-   const left=Math.round((2400-width)/2), top=2090-42-height;
+   const ratio=(w+20)/(h+20), height=Math.round(Math.min(1910,2030/ratio)), width=Math.round(height*ratio);
+   const left=Math.round((2400-width)/2), top=2090-46-height;
    for(const [x,y] of [[left+3,top+3],[left+width-4,top+height-4]]) {
     const i=(y*2400+x)*3;assert.ok(data[i]>230 && data[i+1]>230 && data[i+2]>230,"white border preserved at both corners");
    }

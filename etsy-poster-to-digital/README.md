@@ -598,7 +598,7 @@ npm run watermark:prepare
 
 Liest sämtliche Seiten aller Listing-Zustände (active, draft, inactive, expired, sold_out). Wählt ausschließlich Artikel in den Shop-Bereichen `Poster` und `Poster-Digital` anhand ihrer `shop_section_id`, unabhängig von Titel oder Produkttyp. Beide Bereiche müssen eindeutig vorhanden sein. Verarbeitet **alle Vorschaubilder** dieser Listings, nicht nur das Titelbild. Prüfe vor dem Upload die ausgegebenen Listing-IDs und die JPGs unter `out/watermark/<listing-id>/`.
 
-Originale werden unverändert als `*-original.bin` gesichert (Bilddateien mit neutraler Endung), Vorschauen als `*-watermarked.jpg`. Maximal 2400 Pixel an der längsten Seite, kein Hochskalieren. Standard: ein einzelner Schriftzug „GigglingHome“ in der Bildmitte, um 18° geneigt, Deckkraft 0.14. Seine Breite beträgt ungefähr 35–45 % der Bildbreite, abhängig von Text und Schrift. Dies erschwert das Kopieren; vollständigen Schutz bietet ein Wasserzeichen nicht.
+Originale werden unverändert als `*-original.bin` gesichert (Bilddateien mit neutraler Endung), Vorschauen als `*-watermarked.jpg`. Maximal 2400 Pixel an der längsten Seite, kein Hochskalieren. Standard: ein einzelner Schriftzug „GigglingHome“ im oberen Drittel des Bildes, horizontal zentriert, um 18° geneigt, Deckkraft 0.14. Seine Breite beträgt ungefähr 35–45 % der Bildbreite, abhängig von Text und Schrift. Dies erschwert das Kopieren; vollständigen Schutz bietet ein Wasserzeichen nicht.
 
 ```bash
 npm run watermark:prepare -- --listing 123456789 --text "GigglingHome" --opacity 0.14
@@ -659,63 +659,119 @@ Für Preisänderungen gilt ab jetzt immer der Shop-Bereich `Poster-Digital`, sow
 
 ### Dezentes Wasserzeichen
 
-Der neue Standard ersetzt das wiederholte Muster durch einen einzelnen, mittig platzierten Schriftzug. Falls in deiner bestehenden `.env` noch `WATERMARK_OPACITY=0.22` steht, ändere es auf `0.14` oder verwende `--opacity 0.14`. Bereits vorbereitete JPGs ändern sich durch ein Code-Update nicht. Vor dem ersten Upload kannst du eine neue Vorbereitung in einem anderen Ordner durchführen. Bereits auf Etsy markierte Bilder zuerst mit dem alten Manifest und `watermark:restore` zurückspielen; danach einen neuen Vorbereitungslauf durchführen. Sonst würde das neue Wasserzeichen zusätzlich über das alte gesetzt. Die Position bezieht sich auf das gesamte Mockup; kontrolliere deshalb, ob der Schriftzug auch das darin abgebildete Poster trifft.
+Der neue Standard ersetzt das wiederholte Muster durch einen einzelnen, horizontal mittigen Schriftzug im oberen Drittel. Falls in deiner bestehenden `.env` noch `WATERMARK_OPACITY=0.22` steht, ändere es auf `0.14` oder verwende `--opacity 0.14`. Bereits vorbereitete JPGs ändern sich durch ein Code-Update nicht. Vor dem ersten Upload kannst du eine neue Vorbereitung in einem anderen Ordner durchführen. Bereits auf Etsy markierte Bilder zuerst mit dem alten Manifest und `watermark:restore` zurückspielen; danach einen neuen Vorbereitungslauf durchführen. Sonst würde das neue Wasserzeichen zusätzlich über das alte gesetzt. Die Position bezieht sich auf das gesamte Mockup; kontrolliere deshalb, ob der Schriftzug auch das darin abgebildete Poster trifft.
 
 ### Wasserzeichen nur für Poster-Bereiche
 
 Die feste Auswahl umfasst ausschließlich die Shop-Bereiche `Poster` und `Poster-Digital`, einschließlich physischer Poster. Sie gilt bei Vorbereitung, Upload und Wiederherstellung, auch mit `--listing` oder einem älteren Manifest. Vor jedem Upload wird die aktuelle Bereichszuordnung geprüft. `--all-digital` wurde entfernt und wird als unbekannte Option abgewiesen. Es werden weiterhin alle Vorschaubilder der ausgewählten Artikel verarbeitet.
 
-Der Schriftzug sitzt jetzt exakt bei 50 % der Bildbreite und 50 % der Bildhöhe, weiterhin um 18° geneigt. Die Deckkraft ist über `--opacity` einstellbar. Bestehende Vorschauen müssen neu vorbereitet werden, um die neue Position zu verwenden.
+Der Schriftzug sitzt jetzt exakt bei 50 % der Bildbreite und 16,7 % der Bildhöhe, weiterhin um 18° geneigt. Die Deckkraft ist über `--opacity` einstellbar. Bestehende Vorschauen müssen neu vorbereitet werden, um die neue Position zu verwenden.
 
-## Haupt-Mockup mit schwarzem Holzrahmen (v0.5.0)
+## Haupt-Mockup: zusätzliches erstes Bild
 
-`mockup:prepare` nimmt ausschließlich das Bild mit `rank=1` aus den Shop-Bereichen **Poster** und **Poster-Digital**. Das komplette Gelato-Bild einschließlich weißem Rand und vorhandenem Schatten wird in einen schwarzen Holzrahmen vor einer fotografisch wirkenden warmweißen Wand mit Holzboden und natürlichem Licht gesetzt. Es findet keine Motiv-Erkennung und kein automatisches Ausschneiden statt. Hoch- und Querformate bleiben proportional erhalten; das fertige Bild ist 2400 × 2400 Pixel groß. Digitale Poster erhalten den Hinweis „DIGITAL DOWNLOAD · FRAME NOT INCLUDED“, physische Poster „ART PRINT · FRAME NOT INCLUDED“.
-
-### Zuerst ein Listing lokal ausprobieren
+`mockup:prepare` verwendet das bisherige Bild mit `rank=1` ausschließlich aus den Shop-Bereichen **Poster** und **Poster-Digital**. Das vollständige Gelato-Bild samt weißem Rand bleibt erhalten und wird in einen schwarzen Holzrahmen vor einer fotografisch wirkenden Wand mit Holzboden eingesetzt. Die KI-generierte Hintergrunddatei `assets/mockup-wall-floor.jpg` muss mit übernommen werden; das eigentliche Motiv wird vom Skript unverändert und proportional eingesetzt. Es wird nichts vom Motiv abgeschnitten. Ausgabe: 2400 × 2400 Pixel, großer Rahmen mit wenig Hintergrund und Hinweis, dass der Rahmen nicht enthalten ist.
 
 ```bash
-npm run mockup:prepare -- --listing 123456789
+# Ein Listing ausprobieren (echte ID einsetzen):
+npm run mockup:prepare -- --listing 123456789 --dir out/mockup-gross
+# Oder alle Artikel der beiden Bereiche:
+npm run mockup:prepare -- --state active,draft --dir out/mockup-batch
 ```
 
-Die Beispiel-ID durch deine echte Listing-ID ersetzen. Ohne `--listing` werden alle Artikel der beiden Bereiche in allen Zuständen vorbereitet. Mit `--state active,draft` kannst du die Zustände einschränken:
+Ohne `--state` werden alle Listing-Zustände berücksichtigt. Ohne `--dir` ist der Standardordner `out/mockup`. Prüfe die JPGs vor dem Upload: bestehende Einrichtungsszenen werden nicht erkannt, sondern vollständig mit eingerahmt. Backups und Manifest zusammen aufbewahren.
+
+### Einfügen, nicht ersetzen
 
 ```bash
-npm run mockup:prepare -- --state active,draft --dir out/main-mockups
+npm run mockup:apply -- --dir out/mockup-gross --limit 1
+# Nach Kontrolle auf Etsy:
+npm run mockup:apply -- --dir out/mockup-gross
 ```
 
-Original-Backups, Vorschau-JPGs und `manifest.json` liegen im gewählten Ordner. Vorhandene Manifeste werden nicht überschrieben. Die Vorbereitung ändert nichts auf Etsy. Prüfe die Vorschauen: Das erste Bild sollte nur das Poster mit Gelato-Rand zeigen. Bestehende Einrichtungsszenen würden vollständig mit eingerahmt. Auch sehr breite oder hohe Originale bleiben erhalten, können dadurch aber kleiner wirken. Die Position wird nicht auf das darin enthaltene Poster zugeschnitten.
+**Das neue Rahmen-Mockup wird zusätzlich an Position 1 eingefügt (`overwrite=false`). Das bisherige Hauptbild bleibt sichtbar an Position 2, alle übrigen Bilder rücken um einen Platz nach hinten.** Der Lauf prüft die gesamte Bildfolge und Anzahl nach dem Upload. Er löscht keine bestehenden Bilder, um Platz zu schaffen. Bei 20 vorhandenen Bildern stoppt er vor dem Upload; eine eventuelle niedrigere API-Grenze führt ebenfalls zum Fehler, ohne bewusst ein Bild zu löschen.
 
-### Hauptbild ersetzen
+Ein erneuter Apply-Lauf im selben Ordner überspringt erledigte Einträge. Ein neuer Vorbereitungslauf in einem neuen Ordner kann ein weiteres Rahmenbild erzeugen: Es gibt keine optische Erkennung vorhandener Rahmen. Bestehende noch nicht hochgeladene Vorschauen und `prepared`-Manifeste funktionieren mit der neuen Einfüge-Version; eine erneute Vorbereitung ist dafür nicht nötig.
+
+Das Manifest enthält `operation=insert`, die vorherige Galerie-Reihenfolge unter `previousIds` und die eingefügte Bild-ID unter `newId`. Bei `pending` oder `restoring` ist der Ausgang einer früheren Anfrage unsicher; Etsy manuell vergleichen, bevor der Status korrigiert wird. Falls Etsy den Upload vorgenommen, aber die Verifikation nicht bestanden hat, kann das neue Bild schon vorhanden sein. Die Bild-ID wird daher direkt nach der Upload-Antwort gespeichert. Nicht gleichzeitig dieselbe Galerie in anderen Tools oder im Etsy-Editor bearbeiten.
+
+### Rückgängig machen
 
 ```bash
-npm run mockup:apply -- --dir out/main-mockups --limit 1
-# Nach Kontrolle auf Etsy die übrigen vorbereiteten Hauptbilder ersetzen:
-npm run mockup:apply -- --dir out/main-mockups
+npm run mockup:restore -- --dir out/mockup-gross
 ```
 
-Bei Verwendung des Standardordners `out/mockup` kann `--dir` entfallen. Bei einem einzelnen Test-Listing gilt das ebenfalls. Derselbe Ordner muss für prepare, apply und restore verwendet werden.
-
-Es wird nur Rang 1 mit `overwrite=true` ersetzt. Andere Galerie-Bilder, Listing-Zustand, Preise und Käufer-Download-Dateien bleiben erhalten. Nach jedem Upload werden Anzahl, Reihenfolge und IDs der übrigen Bilder kontrolliert. Bereichszuordnung und Original-Bild-ID werden vor dem Upload überprüft. Bereits erfolgreiche Einträge werden übersprungen; unsichere Upload-Ausgänge führen wie beim Watermark-Skript zu einem Stopp. `pending` bzw. `restoring` erst nach manueller Prüfung mit Etsy abgleichen. Bei einer fehlgeschlagenen Verifikation können Änderungen auf Etsy bereits erfolgt sein.
-
-```bash
-# Ursprüngliche Hauptbilder aus diesem Lauf zurückspielen:
-npm run mockup:restore -- --dir out/main-mockups
-```
-
-Das Mockup-Manifest ist getrennt vom Watermark-Manifest und wird durch `kind=main-mockup` geprüft. Ein Watermark-Manifest darf nicht als Mockup-Manifest verwendet werden.
+Restore entfernt **nur das in diesem Lauf neu eingefügte Rahmenbild anhand seiner ID**. Vorher und nachher wird die Galerie geprüft. Originale werden nicht neu hochgeladen. Ältere bereits angewendete Manifeste aus der früheren Ersetzungs-Version werden dafür abgewiesen; zum Zurückspielen ihres ursprünglichen Hauptbildes die frühere Skriptversion verwenden. Alte noch nicht angewendete Manifeste sind kompatibel.
 
 ### Reihenfolge mit Wasserzeichen
 
-1. Haupt-Mockups aus unmarkierten Originalen vorbereiten, prüfen und hochladen.
-2. Danach Wasserzeichen in einem **neuen** Ausgabeordner vorbereiten. So beziehen sie sich auf die neuen Hauptbilder und deren aktuelle Etsy-IDs.
-3. Wasserzeichen prüfen und hochladen.
+1. Rahmen-Mockups aus unmarkierten Originalen vorbereiten und einfügen.
+2. Danach Wasserzeichen in einem **neuen** Ordner vorbereiten und hochladen. Dadurch werden sowohl das neue Rahmenbild als auch das erhaltene Original und weitere Mockups markiert.
 
-Hast du bislang nur Wasserzeichen vorbereitet, diese JPGs für Bild 1 nach einem Mockup-Upload nicht weiterverwenden: Sie würden das neue Haupt-Mockup wieder durch das alte Bild ersetzen. Die Bild-ID-Prüfung blockiert dies normalerweise bereits. Sind Wasserzeichen schon auf Etsy, zuerst mit ihrem bisherigen Manifest zurückspielen, bevor neue Rahmen erstellt werden. Zur späteren Wiederherstellung zuerst Watermark-Restore, dann Mockup-Restore ausführen. Da Watermark-Restore neue Bild-IDs erzeugt, muss vor Mockup-Restore die tatsächliche aktuelle Hauptbild-ID im Mockup-Manifest unter `newId` abgeglichen werden.
+Bereits vor einem Mockup-Upload vorbereitete Wasserzeichen nicht weiterverwenden: Bild-IDs und Positionen haben sich geändert. Falls Wasserzeichen schon hochgeladen wurden, zuerst diese mit ihrem bisherigen Manifest zurückspielen. Nach weiteren Galerie-Änderungen stoppt Mockup-Restore. Beim Watermark-Restore werden neue Etsy-Bild-IDs erzeugt; danach müssen die aktuelle eingefügte Bild-ID unter `newId` und die übrigen Galerie-IDs unter `previousIds` im Mockup-Manifest anhand Etsy abgeglichen werden, bevor Mockup-Restore funktioniert. Dafür keine IDs raten.
 
-Erneute Vorbereitung in einem neuen Ordner nach einem erfolgreichen Mockup-Upload würde ein bereits gerahmtes Bild nochmals einrahmen. Es gibt keine optische Erkennung vorhandener Rahmen; Original-Backups und Manifeste aufbewahren. Die Vorlage kombiniert eine KI-generierte fotografisch wirkende Wand-/Bodenszene mit einem geometrisch erzeugten schwarzen Holzrahmen. Das Motiv wird deterministisch eingesetzt, nicht von der KI neu gezeichnet. Ein Beispiel steht unter `examples/hauptmockup-beispiel.jpg`.
+Die Befehle verändern weder Preise noch Listing-Zustand oder Käufer-Download-Dateien. Beschränkung auf die beiden Shop-Bereiche gilt auch beim Upload und Restore.
+
+Ein Beispiel steht unter `examples/hauptmockup-beispiel.jpg`. Motivfläche maximal 1910 Pixel hoch bzw. 2030 Pixel breit. Hintergrund-Prompt (Imagegen): leere warmweiße Putzwand mit schmaler Sockelleiste, natürlichem Eichenboden, weichem Sonnenlicht und Fensterschatten, frontale Kamera, keine Rahmen, Motive, Möbel oder Texte.
 
 ```bash
+npm run typecheck
 npm run test:mockup
 ```
 
-Die Hintergrunddatei `assets/mockup-wall-floor.jpg` muss mit dem Projekt übernommen werden. Der schwarze Rahmen steht optisch auf dem Holzboden. Die Bildvorlage wurde mit Imagegen erzeugt. Prompt: fotografisch wirkende leere warmweiße Putzwand mit schmaler Sockelleiste, natürlichem Eichenboden im unteren Bildteil, weichem Sonnenlicht und Fensterschatten, frontale Kamera, keine Rahmen, Motive, Möbel oder Texte.
+### Wasserzeichen zurücksetzen und oben neu setzen
+
+Zuerst `npm run watermark:restore -- --dir ORDNER_DES_BISHERIGEN_WATERMARK_LAUFS` ausführen. Dieser Ordner muss die tatsächlich hochgeladenen Wasserzeichen, ihre Original-Backups und das zugehörige Manifest enthalten. Nicht den Mockup-Ordner verwenden. Erst nach erfolgreichem Restore neu vorbereiten, z. B. `npm run watermark:prepare -- --opacity 0.22 --dir out/watermark-oben`, Vorschauen prüfen und anschließend `npm run watermark:apply -- --dir out/watermark-oben`. Die Deckkraft bleibt konfigurierbar. Der Text sitzt bei 16,7 % der gesamten Bildhöhe und bleibt um 18° geneigt. Bei Raumszenen die Platzierung auf dem tatsächlichen Poster kontrollieren.
+
+### Verzögerte Etsy-Galerie und pending-Einträge
+
+Nach Einfügen oder Entfernen prüft das Skript die Galerie mehrfach (sofort, dann nach 1, 2, 4 und 8 Sekunden). Es wiederholt ausschließlich Leseanfragen, niemals den Upload. Bei einer dauerhaft abweichenden Galerie werden erwartete und tatsächliche IDs/Positionen ausgegeben; der Status bleibt offen.
+
+```bash
+npm run mockup:reconcile -- --dir out/mockup-alle
+npm run mockup:apply -- --dir out/mockup-alle
+```
+
+Reconcile verändert keine Etsy-Bilder. Es prüft für `pending`, ob die Galerie exakt dem eingefügten Mockup plus den ursprünglichen Bildern entspricht, und setzt erst dann `applied`. Für `restoring` muss exakt die ursprüngliche Galerie vorliegen, bevor `restored` gespeichert wird. Fehlende `newId` oder Galerie-Abweichungen führen zum Stopp; es werden keine IDs geraten. Ein erneuter Apply-Lauf überspringt erfolgreich abgeglichene Einträge.
+
+### Doppelte Rangwerte von Etsy
+
+Etsy kann nach dem Einfügen sowohl das neue als auch das bisherige Hauptbild mit `rank=1` melden und die alten Ränge unverändert lassen. Apply/Reconcile und Restore akzeptieren zusätzlich zur fortlaufenden Rangfolge exakt dieses Muster: neue ID auf Rang 1 plus sämtliche bisherigen IDs mit ihren ursprünglichen Rängen. Anzahl und Eindeutigkeit aller Bild-IDs müssen stimmen. Beliebige andere doppelte Ränge, fehlende oder zusätzliche Bilder werden nicht akzeptiert. Die sichtbare Reihenfolge im Etsy-Shop bitte beim ersten Upload kontrollieren; aus doppelten Rangwerten allein lässt sie sich nicht eindeutig ableiten.
+
+## Buch-Mockups für Coloring Books (v0.6.0)
+
+Die neuen `book-mockup:*`-Befehle erfassen **ausschließlich den exakt benannten Shop-Bereich `Coloring Books`**. Das erste Bild (`rank=1`) wird als vollständiges Cover in eine liegende, um 8° gedrehte Paperback-Ansicht von oben mit sichtbaren Papierkanten und Bindungsfalz eingesetzt. Hintergrund ist die eigene helle Tischplatte mit bunten Stiften am Rand (`assets/book-mockup-table.jpg`). Das Cover wird proportional eingesetzt, nicht neu gezeichnet oder beschnitten. Ausgabe: 2400 × 2400 Pixel.
+
+Das erste Listing-Bild muss ein einzelnes Frontcover zeigen: Wenn es bereits eine Raumszene, Vorder- und Rückseite nebeneinander oder mehrere Seiten zeigt, würde das ganze Bild als Cover eingesetzt. Prüfe deshalb die lokalen Vorschauen. Die dargestellte Buchdicke ist eine dekorative Vorlage und wird nicht aus einer tatsächlichen Seitenzahl berechnet. Für digitale Produkte wird „PRINTABLE COLORING BOOK · DIGITAL DOWNLOAD“ ergänzt; sonst „COLORING BOOK · COVER PREVIEW“.
+
+```bash
+# Ein Listing testen, echte ID einsetzen:
+npm run book-mockup:prepare -- --listing 123456789 --dir out/books-test
+# Oder alle aktiven Artikel und Entwürfe in Coloring Books:
+npm run book-mockup:prepare -- --state active,draft --dir out/books-alle
+# Vorschauen prüfen und zunächst ein Bild hinzufügen:
+npm run book-mockup:apply -- --dir out/books-alle --limit 1
+# Dann alle übrigen hinzufügen:
+npm run book-mockup:apply -- --dir out/books-alle
+```
+
+Ohne `--state` werden alle Zustände berücksichtigt. Standardordner ohne `--dir`: `out/book-mockup`. Die ursprünglichen Listing-Bilder bleiben vollständig erhalten: Das Buch-Mockup wird **zusätzlich an Position 1** eingefügt, das bisherige Hauptbild rückt auf Position 2. Bei 20 vorhandenen Bildern wird nicht hochgeladen und nichts gelöscht. Alle bisherigen Bild-IDs werden geprüft, auch wenn Etsy doppelte Rangwerte für neue und alte Hauptbilder liefert.
+
+```bash
+# Unsicheren Upload-Ausgang prüfen, ohne Bilder zu ändern:
+npm run book-mockup:reconcile -- --dir out/books-alle
+# Neu hinzugefügte Buchbilder entfernen; Originale bleiben erhalten:
+npm run book-mockup:restore -- --dir out/books-alle
+```
+
+Backups und eigenes `kind=book-mockup`-Manifest liegen im Ausgabeordner. Poster-Mockup-Manifeste sind dafür nicht gültig. Bereits erfolgreiche Einträge werden beim erneuten Apply im selben Ordner übersprungen. Die Prüfung liest die Galerie bei Bedarf mehrfach, ohne den Upload zu wiederholen. Für neue Vorbereitungsläufe andere Ordner verwenden; bereits hinzugefügte Buchansichten werden nicht optisch erkannt und würden nochmals als Cover verwendet. Kein erneuter Prepare-Lauf auf schon bearbeitete Artikel, bevor diese zurückgesetzt oder aus der Auswahl entfernt wurden.
+
+Bereits markierte Cover behalten ihr Wasserzeichen. Die bisherigen Watermark-Befehle sind weiterhin auf `Poster`/`Poster-Digital` beschränkt und erfassen Coloring Books nicht. Die neuen Buch-Befehle verändern keine Preise, Texte, Listing-Zustände oder Käufer-Download-Dateien.
+
+```bash
+npm run typecheck
+npm run test:book-mockup
+```
+
+### Buch-Hintergrund: Tischplatte mit Stiften
+
+Für Buch-Mockups `src/book-mockup-image.ts` und `assets/book-mockup-table.jpg` übernehmen. Poster-Mockups verwenden weiterhin ihre bisherige Wand-/Bodenszene. Bereits vorbereitete Buch-JPGs bleiben unverändert; neue Vorschauen in einem neuen Ordner erstellen. Bereits eingefügte Buchbilder vor einer erneuten Vorbereitung mit dem alten Manifest zurücksetzen, sonst entsteht eine weitere Buchansicht aus einem vorhandenen Mockup. Die Tischplatte wurde mit Imagegen erzeugt: quadratische Draufsicht auf helles warmes Holz, farbige Buntstifte nur am äußeren Rand, freie Mitte, sanftes Tageslicht, illustrativer Stil, keine Bücher, Texte oder Logos.

@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { mkdir, readFile, writeFile, rename, open, unlink } from "node:fs/promises";
+import { setTimeout as delay } from "node:timers/promises";
 import { resolve, join } from "node:path";
 import { etsyFetch, getMyShop, getAllShopListings, getListing, getListingImages } from "./etsy.js";
 import { createMainMockup } from "./mockup-image.js";
@@ -17,6 +18,23 @@ async function upload(shop: number, e: Entry, path: string) {
   if (e.altText) form.append("alt_text", e.altText);
   return etsyFetch<EtsyListingImage>(`/application/shops/${shop}/listings/${e.listingId}/images`, { method: "POST", body: form });
 }
+function matchesGallery(images: EtsyListingImage[], ids: number[], inserted = false) {
+  if (images.length !== ids.length || new Set(images.map(image => image.listing_image_id)).size !== ids.length) return false;
+  const rankOf = (id: number) => images.find(image => image.listing_image_id === id)?.rank;
+  if (ids.every((id, index) => rankOf(id) === index + 1)) return true;
+  // Etsy may return the new image at rank 1 without incrementing old ranks.
+  // Accept only this exact ID/rank pattern, not arbitrary duplicate ranks.
+  return inserted && ids.length > 1 && rankOf(ids[0]) === 1 && ids.slice(1).every((id, index) => rankOf(id) === index + 1);
+}
+async function verifyGallery(shopId: number, listingId: number, ids: number[], inserted = false) {
+  let last: EtsyListingImage[] = [];
+  for (const waitMs of [0, 1000, 2000, 4000, 8000]) {
+    if (waitMs) { console.log(`Waiting ${waitMs / 1000}s for Etsy gallery verification: ${listingId}`); await delay(waitMs); }
+    last = await getListingImages(shopId, listingId);
+    if (matchesGallery(last, ids, inserted)) return;
+  }
+  throw new Error(`Gallery verification failed for ${listingId}. Expected IDs by rank: ${ids.join(", ")}. Actual: ${[...last].sort((a,b) => a.rank! - b.rank!).map(i => `${i.rank}:${i.listing_image_id}`).join(", ")}. No upload will be retried. Run mockup:reconcile after checking Etsy.`);
+}
 async function main() {
   const allowed = new Set(["--dir", "--listing", "--state", "--limit", "--help"]);
   for (let i = 1; i < args.length; i++) {
@@ -24,8 +42,8 @@ async function main() {
     if (!["--help"].includes(args[i])) { arg(args[i]); i++; }
   }
   const command = args[0];
-  if (!command || command === "--help") { console.log("mockup: prepare | apply | restore [--dir out/mockup] [--listing ID] [--state active,draft] [--limit N]"); return; }
-  if (!["prepare", "apply", "restore"].includes(command)) throw new Error("Unknown command");
+  if (!command || command === "--help") { console.log("mockup: prepare | apply | restore | reconcile [--dir out/mockup] [--listing ID] [--state active,draft] [--limit N]"); return; }
+  if (!["prepare", "apply", "restore", "reconcile"].includes(command)) throw new Error("Unknown command");
   const dir = resolve(arg("--dir") || "out/mockup");
   await mkdir(dir, { recursive: true });
   const lockPath = join(dir, ".lock");
@@ -76,7 +94,24 @@ async function main() {
     if (!m || m.kind !== "main-mockup" || m.version !== 1 || m.shopId !== shop.shop_id) throw new Error("Missing/incompatible manifest or wrong shop");
     const limit = Number(arg("--limit") || Number.MAX_SAFE_INTEGER);
     if (!Number.isSafeInteger(limit) || limit < 1) throw new Error("--limit must be a positive integer");
-    if (m.entries.some(e => e.status === "pending" || e.status === "restoring")) throw new Error("An earlier upload has an uncertain outcome. Compare Etsy with the manifest and reconcile its status/newId before continuing; do not blindly retry.");
+    if (command === "reconcile") {
+      let count = 0;
+      for (const entry of m.entries) {
+        if (!["pending", "restoring"].includes(entry.status)) continue;
+        if (arg("--listing") && String(entry.listingId) !== arg("--listing")) continue;
+        if (count >= limit) break;
+        if (entry.operation !== "insert" || !entry.newId || !entry.previousIds?.length) throw new Error(`Cannot reconcile ${entry.listingId}: insertion metadata/newId missing. Inspect Etsy manually; no upload was attempted.`);
+        const live = await getListing(entry.listingId);
+        if (live.shop_id !== shop.shop_id || !allowedSections.has(live.shop_section_id ?? -1)) throw new Error("Listing ownership/section changed.");
+        const expectedIds = entry.status === "pending" ? [entry.newId, ...entry.previousIds] : entry.previousIds;
+        await verifyGallery(shop.shop_id, entry.listingId, expectedIds, entry.status === "pending");
+        entry.status = entry.status === "pending" ? "applied" : "restored";
+        await save(); count++;
+        console.log(`Reconciled ${entry.listingId}: ${entry.status}. No images changed.`);
+      }
+      console.log(`${count} uncertain entries reconciled.`); return;
+    }
+    if (m.entries.some(e => e.status === "pending" || e.status === "restoring")) throw new Error(`An earlier upload has an uncertain outcome. Run npm run mockup:reconcile -- --dir "${dir}" before continuing; do not blindly retry.`);
     let count = 0;
     for (const e of m.entries) {
       if (e.rank !== 1) throw new Error("Mockup manifest may only contain rank-1 images.");
@@ -87,9 +122,9 @@ async function main() {
       if (live.shop_id !== shop.shop_id || !allowedSections.has(live.shop_section_id ?? -1)) throw new Error("Listing ownership/section changed; only Poster and Poster-Digital are allowed.");
       const images = await getListingImages(shop.shop_id, e.listingId);
       const expected = command === "apply" ? e.originalId : e.newId;
-      if (images.find(i => i.rank === e.rank)?.listing_image_id !== expected) throw new Error(`Image at rank ${e.rank} changed in listing ${e.listingId}; stopping.`);
+      if ((command === "apply" ? images.find(i => i.rank === e.rank)?.listing_image_id : images.find(i => i.listing_image_id === expected && i.rank === 1)?.listing_image_id) !== expected) throw new Error(`Image at rank ${e.rank} changed in listing ${e.listingId}; stopping.`);
       const ordered = [...images].sort((a, b) => a.rank! - b.rank!);
-      if (ordered.some((image, index) => image.rank !== index + 1)) throw new Error("Gallery ranks are not consecutive; stopping.");
+      if (command === "apply" && ordered.some((image, index) => image.rank !== index + 1)) throw new Error("Gallery ranks are not consecutive; stopping.");
       if (command === "apply") {
         if (images.length >= 20) throw new Error("Gallery has 20 images. No image was removed; free a slot manually before inserting a mockup.");
         const path = join(dir, e.preview);
@@ -100,18 +135,15 @@ async function main() {
         const result = await upload(shop.shop_id, e, path);
         if (!result.listing_image_id) throw new Error("Upload returned no image ID. Inspect Etsy before continuing.");
         e.newId = result.listing_image_id; await save();
-        const after = await getListingImages(shop.shop_id, e.listingId);
-        const expectedIds = [e.newId, ...e.previousIds];
-        if (after.length !== expectedIds.length || expectedIds.some((id, index) => after.find(image => image.rank === index + 1)?.listing_image_id !== id)) throw new Error("Etsy insertion verification failed. Inspect Etsy before continuing.");
+        await verifyGallery(shop.shop_id, e.listingId, [e.newId, ...e.previousIds], true);
         e.status = "applied"; await save();
       } else {
         if (e.operation !== "insert" || !e.previousIds || !e.newId) throw new Error("This entry was applied by the old replacement workflow. Use the previous script version to restore it; it cannot be removed as an inserted image.");
         const expectedIds = [e.newId, ...e.previousIds];
-        if (ordered.length !== expectedIds.length || ordered.some((image, index) => image.listing_image_id !== expectedIds[index])) throw new Error("Gallery changed since insertion; inspect Etsy before removing the mockup.");
+        if (!matchesGallery(images, expectedIds, true)) throw new Error("Gallery changed since insertion; inspect Etsy before removing the mockup.");
         e.status = "restoring"; await save();
         await etsyFetch(`/application/shops/${shop.shop_id}/listings/${e.listingId}/images/${e.newId}`, { method: "DELETE" });
-        const after = await getListingImages(shop.shop_id, e.listingId);
-        if (after.length !== e.previousIds.length || e.previousIds.some((id, index) => after.find(image => image.rank === index + 1)?.listing_image_id !== id)) throw new Error("Mockup removal verification failed. Inspect Etsy before continuing.");
+        await verifyGallery(shop.shop_id, e.listingId, e.previousIds);
         e.status = "restored"; await save();
       }
       console.log(`${command}: ${e.listingId} rank ${e.rank}`); count++;

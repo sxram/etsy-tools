@@ -1,6 +1,6 @@
 {
   "name": "etsy-poster-to-digital",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -22,7 +22,13 @@
     "mockup:prepare": "tsx src/mockup.ts prepare",
     "mockup:apply": "tsx src/mockup.ts apply",
     "mockup:restore": "tsx src/mockup.ts restore",
-    "test:mockup": "node --import tsx --test src/mockup-image.test.ts src/mockup-flow.test.ts"
+    "test:mockup": "node --import tsx --test src/mockup-image.test.ts src/mockup-flow.test.ts",
+    "mockup:reconcile": "tsx src/mockup.ts reconcile",
+    "book-mockup:prepare": "tsx src/book-mockup.ts prepare",
+    "book-mockup:apply": "tsx src/book-mockup.ts apply",
+    "book-mockup:restore": "tsx src/book-mockup.ts restore",
+    "book-mockup:reconcile": "tsx src/book-mockup.ts reconcile",
+    "test:book-mockup": "node --import tsx --test src/book-mockup-image.test.ts src/book-mockup-flow.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.6.1",
