@@ -775,3 +775,21 @@ npm run test:book-mockup
 ### Buch-Hintergrund: Tischplatte mit Stiften
 
 Für Buch-Mockups `src/book-mockup-image.ts` und `assets/book-mockup-table.jpg` übernehmen. Poster-Mockups verwenden weiterhin ihre bisherige Wand-/Bodenszene. Bereits vorbereitete Buch-JPGs bleiben unverändert; neue Vorschauen in einem neuen Ordner erstellen. Bereits eingefügte Buchbilder vor einer erneuten Vorbereitung mit dem alten Manifest zurücksetzen, sonst entsteht eine weitere Buchansicht aus einem vorhandenen Mockup. Die Tischplatte wurde mit Imagegen erzeugt: quadratische Draufsicht auf helles warmes Holz, farbige Buntstifte nur am äußeren Rand, freie Mitte, sanftes Tageslicht, illustrativer Stil, keine Bücher, Texte oder Logos.
+
+### Größere Buchansicht
+
+Die Buchansicht ist jetzt um 15 % größer. Die neue Tischplattenvorlage legt die Stifte eng an die äußeren Ecken und Kanten, damit mehr Platz für das Cover bleibt. Hintergrund und Hinweis werden nicht mit vergrößert. Zum Aktualisieren `src/book-mockup-image.ts` und `assets/book-mockup-table.jpg` übernehmen und neue Vorschauen in einem neuen Ordner erstellen.
+
+## Einen neuen Artikel vollständig bearbeiten
+
+```bash
+npm run article:process -- --listing 123456789
+# Eigene Wasserzeichen-Stärke für Poster:
+npm run article:process -- --listing 123456789 --opacity 0.40
+```
+
+Der Befehl lädt Bilder direkt hoch. `Coloring Books`: nur Buch-Mockup vorbereiten und zusätzlich vorne einfügen. `Poster`/`Poster-Digital`: zuerst alle Galerie-Bilder mit Wasserzeichen ersetzen, danach das jetzt markierte Hauptbild in den Rahmen einsetzen und als zusätzliches erstes Bild einfügen. Damit trägt auch das Rahmenbild das Wasserzeichen; es wird kein zweites darübergelegt. Die Position des Schriftzugs im fertigen Rahmenbild folgt dem darin eingesetzten Cover. Andere Shop-Bereiche werden abgewiesen.
+
+Pro ID liegen Backups, Stufen-Manifeste und Einstellungen unter `out/article-ID`. Alternativ `--dir out/mein-artikel` angeben. Wiederholungen mit derselben ID, denselben Einstellungen und demselben Ordner überspringen erfolgreich bearbeitete Schritte; unklare Mockup-Uploads werden ausschließlich lesend abgeglichen. Unklare Watermark-Uploads führen zum Stopp. Bereits zurückgesetzte Stufen werden nicht automatisch neu angewendet. Nicht in einem neuen Ordner auf bereits bearbeitete Listings laufen lassen, sonst drohen doppelte Wasserzeichen und Mockups. Dieser Ablauf ist für neue, noch nicht bearbeitete Artikel gedacht. Ein Fehler zwischen Stufen kann bereits abgeschlossene Änderungen auf Etsy hinterlassen; der Befehl ist keine Transaktion.
+
+Wichtig: Die ältere Empfehlung „erst Mockup, dann Watermark“ gilt für den separaten Batch-Ablauf. Der neue Artikel-Befehl verwendet ausdrücklich die gewünschte Reihenfolge **Watermark → Mockup**. Bilder und Listing-Zustand sollten während des Laufs nicht parallel geändert werden. Da der neue Befehl direkt hochlädt, eine passende erste Cover-/Posteransicht im Listing verwenden. Die bestehenden separaten Prepare-Befehle bleiben für lokale Vorabprüfung verfügbar.

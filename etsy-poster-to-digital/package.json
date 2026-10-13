@@ -28,7 +28,8 @@
     "book-mockup:apply": "tsx src/book-mockup.ts apply",
     "book-mockup:restore": "tsx src/book-mockup.ts restore",
     "book-mockup:reconcile": "tsx src/book-mockup.ts reconcile",
-    "test:book-mockup": "node --import tsx --test src/book-mockup-image.test.ts src/book-mockup-flow.test.ts"
+    "test:book-mockup": "node --import tsx --test src/book-mockup-image.test.ts src/book-mockup-flow.test.ts",
+    "article:process": "tsx src/process-article.ts"
   },
   "dependencies": {
     "dotenv": "^16.6.1",

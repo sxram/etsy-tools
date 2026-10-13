@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "kind": "main-mockup",
+  "shopId": 68057917,
+  "entries": [
+    {
+      "listingId": 4594782360,
+      "title": "Moonlit Mushroom Village Print | Enchanted Forest Wall Art | Fairy Tale Nursery Poster | Cottagecore Decor |  Digital Download",
+      "originalId": 8672925726,
+      "rank": 1,
+      "altText": "",
+      "original": "4594782360/8672925726-original.bin",
+      "preview": "4594782360/8672925726-main-mockup.jpg",
+      "status": "applied",
+      "operation": "insert",
+      "previousIds": [
+        8672925726
+      ],
+      "newId": 8720757817
+    }
+  ]
+}
