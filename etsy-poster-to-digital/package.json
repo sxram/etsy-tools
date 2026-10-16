@@ -31,8 +31,9 @@
     "test:book-mockup": "node --import tsx --test src/book-mockup-image.test.ts src/book-mockup-flow.test.ts",
     "article:process": "tsx src/process-article.ts",
     "poster:preview": "tsx src/new-poster.ts",
-    "poster:create": "tsx src/new-poster.ts --create",
-    "test:poster": "node --import tsx --test src/new-poster.test.ts"
+    "poster:create": "tsx src/poster-process.ts",
+    "test:poster": "node --import tsx --test src/new-poster.test.ts src/poster-process.test.ts",
+    "poster:draft": "tsx src/new-poster.ts --create"
   },
   "dependencies": {
     "dotenv": "^16.6.1",

@@ -815,7 +815,7 @@ Tags: fuchs poster, mondwald, wald kinderzimmer
 
 ```sh
 npm run poster:preview -- --dir ./eingang
-npm run poster:create -- --dir ./eingang
+npm run poster:draft -- --dir ./eingang
 ```
 
 Die Vorschau erzeugt lokale Dateien unter `out/new-posters/<motiv>/`, ohne Etsy zu kontaktieren. Der Erstellungsbefehl verarbeitet das Bild und die Beschreibung im übergebenen Ordner und erzeugt einen Etsy-Entwurf. Alternativ zu `--dir ./eingang` kann der Ordner direkt angegeben werden: `npm run poster:preview -- ./eingang`. Bestehende Zugangsdaten und OAuth-Anmeldung werden verwendet.
@@ -834,4 +834,26 @@ Die Beschreibung wird auf die Downloadangaben (1 JPG, 7087 × 9449 Pixel, 300 dp
 
 Titel und Tags werden auch als Markdown-Überschriften erkannt, z. B. `**Title**` oder `**Tags**` mit Inhalt in der nächsten nicht leeren Zeile. Ebenso funktionieren `**Titel**`, `**Schlagwörter**`, `## Title` und Überschriften mit Doppelpunkt. Tags können durch Kommas/Semikolons getrennt oder als aufeinanderfolgende Listenpunkte angegeben werden. Die erkannten Felder werden aus der Artikelbeschreibung entfernt.
 
-Bei einem Verbindungsabbruch nach Anlage des Entwurfs: `npm run poster:create -- --dir ./eingang --resume`. Das Script verwendet die gespeicherte Etsy-ID, prüft den Entwurf und ergänzt nur fehlende Uploads. Ohne gespeicherte ID muss zunächst in Etsy nach dem eventuell angelegten Entwurf gesucht werden. Netzwerkfehler nennen jetzt den betroffenen Aufruf und Fehlercode; Schreibzugriffe werden nicht automatisch wiederholt.
+Bei einem Verbindungsabbruch nach Anlage des Entwurfs: `npm run poster:draft -- --dir ./eingang --resume`. Das Script verwendet die gespeicherte Etsy-ID, prüft den Entwurf und ergänzt nur fehlende Uploads. Ohne gespeicherte ID muss zunächst in Etsy nach dem eventuell angelegten Entwurf gesucht werden. Netzwerkfehler nennen jetzt den betroffenen Aufruf und Fehlercode; Schreibzugriffe werden nicht automatisch wiederholt.
+
+## Gesamtablauf: neues digitales Poster mit Wasserzeichen und Mockup
+
+```sh
+npm run poster:create -- --dir ./mein-poster
+# Optional anderes Wasserzeichen:
+npm run poster:create -- --dir ./mein-poster --text GigglingHome --opacity 0.14
+```
+
+Dieser Befehl führt nacheinander aus:
+
+1. Bild und Beschreibung aus dem Ordner lesen, Druckdatei erzeugen und Etsy-Entwurf erstellen.
+2. Die Artikelbilder des gerade erstellten Entwurfs mit Wasserzeichen versehen.
+3. Das Mockup aus dem bereits mit Wasserzeichen versehenen Artikelbild erstellen und in die Galerie einfügen.
+
+Die hochskalierte Käufer-Download-Datei erhält kein Wasserzeichen und kein Mockup. Preis, Stückzahl und Abteilung entsprechen `poster:draft`; der Artikel bleibt ein Entwurf. Die Auswahl „Mit einem KI-Generator“ muss weiterhin im Etsy-Editor gespeichert werden.
+
+Druckdatei und Erstellungsstatus liegen unter `<eingabeordner>/out/new-posters/<bildname>/`. Die Verarbeitung verwendet darunter `processing/` für Sicherungen und Fortschritt von Wasserzeichen und Mockup. Diese Dateien für eine Fortsetzung behalten.
+
+Nach einem Fehler denselben `poster:create`-Befehl mit denselben Optionen erneut ausführen: Der vorhandene Entwurf wird wiederverwendet, unvollständige Uploads werden über den bisherigen Resume-Ablauf fortgesetzt. Bereits abgeschlossene Verarbeitungsschritte verwenden ihre gespeicherten Statusdateien. Bei einem ungewissen Upload-Ergebnis wird zur Prüfung angehalten, statt blind erneut hochzuladen. Titel und Beschreibung bestehender Entwürfe werden dabei wie bisher nicht neu geschrieben. Direkte Einzelbefehle nicht parallel zum Gesamtlauf ausführen. Nach einem Prozessabsturz `.poster-process-lock` nur entfernen, wenn kein Gesamtlauf mehr aktiv ist.
+
+`poster:create` ist der Gesamtbefehl. Nur den Entwurf ohne Wasserzeichen und Mockup erstellt bei Bedarf `npm run poster:draft -- --dir ./mein-poster`.
