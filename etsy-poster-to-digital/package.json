@@ -29,7 +29,10 @@
     "book-mockup:restore": "tsx src/book-mockup.ts restore",
     "book-mockup:reconcile": "tsx src/book-mockup.ts reconcile",
     "test:book-mockup": "node --import tsx --test src/book-mockup-image.test.ts src/book-mockup-flow.test.ts",
-    "article:process": "tsx src/process-article.ts"
+    "article:process": "tsx src/process-article.ts",
+    "poster:preview": "tsx src/new-poster.ts",
+    "poster:create": "tsx src/new-poster.ts --create",
+    "test:poster": "node --import tsx --test src/new-poster.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.6.1",

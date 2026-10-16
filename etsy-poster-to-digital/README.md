@@ -793,3 +793,45 @@ Der Befehl lädt Bilder direkt hoch. `Coloring Books`: nur Buch-Mockup vorbereit
 Pro ID liegen Backups, Stufen-Manifeste und Einstellungen unter `out/article-ID`. Alternativ `--dir out/mein-artikel` angeben. Wiederholungen mit derselben ID, denselben Einstellungen und demselben Ordner überspringen erfolgreich bearbeitete Schritte; unklare Mockup-Uploads werden ausschließlich lesend abgeglichen. Unklare Watermark-Uploads führen zum Stopp. Bereits zurückgesetzte Stufen werden nicht automatisch neu angewendet. Nicht in einem neuen Ordner auf bereits bearbeitete Listings laufen lassen, sonst drohen doppelte Wasserzeichen und Mockups. Dieser Ablauf ist für neue, noch nicht bearbeitete Artikel gedacht. Ein Fehler zwischen Stufen kann bereits abgeschlossene Änderungen auf Etsy hinterlassen; der Befehl ist keine Transaktion.
 
 Wichtig: Die ältere Empfehlung „erst Mockup, dann Watermark“ gilt für den separaten Batch-Ablauf. Der neue Artikel-Befehl verwendet ausdrücklich die gewünschte Reihenfolge **Watermark → Mockup**. Bilder und Listing-Zustand sollten während des Laufs nicht parallel geändert werden. Da der neue Befehl direkt hochlädt, eine passende erste Cover-/Posteransicht im Listing verwenden. Die bestehenden separaten Prepare-Befehle bleiben für lokale Vorabprüfung verfügbar.
+
+## Neue digitale Poster aus Bild + Text
+
+Einen Eingabeordner mit genau einer JPG- oder PNG-Bilddatei und genau einer Beschreibung als `.txt` oder `.md` übergeben. Die Dateinamen müssen nicht übereinstimmen. Die Suche erfolgt direkt im Ordner, ohne Unterordner. Bei fehlenden oder mehreren passenden Dateien bricht das Script mit einer verständlichen Meldung ab.
+
+Beispielinhalt:
+
+- `wald.jpg` (auch `.jpeg` oder `.png`, Groß-/Kleinschreibung egal): das Motiv, das zugleich als Etsy-Artikelbild dient.
+- `beschreibung.md` (oder `.txt`): Beschreibung mit beliebigem Dateinamen.
+
+Beispiel für die Textdatei:
+
+```text
+Titel: Verträumter Fuchs im Mondwald
+Ein kleiner Fuchs in einem verträumten Wald unter dem Mond.
+Tags: fuchs poster, mondwald, wald kinderzimmer
+```
+
+`Titel:` und `Tags:` sind optional. Ohne diese Angaben verwendet das Script den ersten Satz als Titel und extrahiert Wortpaare aus der Beschreibung als Tags (regelbasiert, ohne externen KI-Dienst). Maximal 140 Titelzeichen und 13 Tags mit jeweils maximal 20 Zeichen. Der Beschreibung wird ein Hinweis auf den digitalen Download und die KI-Erstellung angefügt.
+
+```sh
+npm run poster:preview -- --dir ./eingang
+npm run poster:create -- --dir ./eingang
+```
+
+Die Vorschau erzeugt lokale Dateien unter `out/new-posters/<motiv>/`, ohne Etsy zu kontaktieren. Der Erstellungsbefehl verarbeitet das Bild und die Beschreibung im übergebenen Ordner und erzeugt einen Etsy-Entwurf. Alternativ zu `--dir ./eingang` kann der Ordner direkt angegeben werden: `npm run poster:preview -- ./eingang`. Bestehende Zugangsdaten und OAuth-Anmeldung werden verwendet.
+
+Vorgaben dieses neuen Ablaufs: **1,49 EUR**, **999 Stück**, Abteilung **Poster-Digital**, Kategorie **Digital Prints**, Sofortdownload. Die Abteilung muss bereits existieren; die Shop-Währung wird vor Erstellung auf EUR geprüft. Die bisherigen Konvertierungsbefehle behalten ihre Konfiguration.
+
+Die separate Druckdatei ist ein geschärftes JPG mit **7087 × 9449 Pixeln und 300 dpi** für etwa **60 × 80 cm**. Abweichende Seitenverhältnisse erhalten weiße Ränder, damit nichts abgeschnitten oder verzerrt wird. Das Ausgangsbild wird unverändert als Artikelbild hochgeladen. Verwende daher ein reines Motiv: Rahmen oder Wasserzeichen im Ausgangsbild werden auch Bestandteil der Druckdatei. Hochskalierung erzeugt keine fehlenden Originaldetails; die Druckqualität hängt vom Ausgangsbild ab. Dateien über Etsys 20-MB-Limit werden vor Erstellung abgewiesen.
+
+**Noch im Etsy-Editor erforderlich:** Unter „Wie wird dieser digitale Inhalt erstellt?“ **„Mit einem KI-Generator“** auswählen und den Entwurf speichern. Die öffentliche Etsy-API stellt dafür aktuell kein dokumentiertes Feld bereit. Ein Beschreibungshinweis ersetzt diese Auswahl nicht. Das Script gibt den Editor-Link aus und speichert den Status `needs_ai_disclosure`; der Artikel wird nicht veröffentlicht.
+
+`listing.json` protokolliert den Erstellungsstatus und die Etsy-ID unmittelbar nach deren Rückgabe. Nach einem Etsy-Versuch blockiert das Script erneute Verarbeitung desselben Motivs, um Duplikate zu verhindern. Bei Fehlern den gespeicherten Entwurf und seine Uploads in Etsy prüfen. Bei Status `creating` kann bereits ein Entwurf existieren, dessen Antwort verloren ging. Die Statusdatei erst nach dieser Prüfung entfernen, wenn eine neue Erstellung wirklich gewünscht ist.
+
+Prüfung: `npm run typecheck` und `npm run test:poster`.
+
+Die Beschreibung wird auf die Downloadangaben (1 JPG, 7087 × 9449 Pixel, 300 dpi, 3:4 Hochformat) und Druckgrößen (60 × 80, 30 × 40 und 45 × 60 cm) geprüft. Fehlende Downloadangaben werden als englische Liste mit „Your digital download includes:“ ergänzt. Fehlen Druckgrößen, wird der Satz „Prepared for printing at 60 × 80 cm, or smaller 3:4 sizes such as 30 × 40 cm and 45 × 60 cm“ ergänzt. Bereits erkannte Angaben werden nicht erneut als Listenpunkt angehängt; `x` und `×` sowie Groß-/Kleinschreibung werden berücksichtigt. Die Eingabe-Textdatei bleibt unverändert.
+
+Titel und Tags werden auch als Markdown-Überschriften erkannt, z. B. `**Title**` oder `**Tags**` mit Inhalt in der nächsten nicht leeren Zeile. Ebenso funktionieren `**Titel**`, `**Schlagwörter**`, `## Title` und Überschriften mit Doppelpunkt. Tags können durch Kommas/Semikolons getrennt oder als aufeinanderfolgende Listenpunkte angegeben werden. Die erkannten Felder werden aus der Artikelbeschreibung entfernt.
+
+Bei einem Verbindungsabbruch nach Anlage des Entwurfs: `npm run poster:create -- --dir ./eingang --resume`. Das Script verwendet die gespeicherte Etsy-ID, prüft den Entwurf und ergänzt nur fehlende Uploads. Ohne gespeicherte ID muss zunächst in Etsy nach dem eventuell angelegten Entwurf gesucht werden. Netzwerkfehler nennen jetzt den betroffenen Aufruf und Fehlercode; Schreibzugriffe werden nicht automatisch wiederholt.

@@ -6,13 +6,24 @@ import type { EtsyListing, EtsyListingFile, EtsyListingImage, EtsyShop, EtsyToke
 
 function xApiKey() { return `${config.apiKey}:${config.sharedSecret}`; }
 
+export async function fetchEtsyResponse(url: string, init: RequestInit): Promise<Response> {
+  try {
+    return await fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(120_000) });
+  } catch (error) {
+    const cause = (error as { cause?: { code?: string } }).cause;
+    const code = cause?.code || (error instanceof Error ? error.name : "unknown");
+    const target = new URL(url);
+    throw new Error(`Etsy-Verbindungsfehler bei ${init.method || "GET"} ${target.hostname}${target.pathname} (${code}). Verbindung, DNS, VPN oder Proxy prüfen. Schreibzugriffe werden nicht automatisch wiederholt.`, { cause: error });
+  }
+}
+
 async function refreshToken(token: EtsyToken): Promise<EtsyToken> {
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     client_id: config.apiKey,
     refresh_token: token.refresh_token,
   });
-  const res = await fetch(`${API_BASE}/public/oauth/token`, {
+  const res = await fetchEtsyResponse(`${API_BASE}/public/oauth/token`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body,
@@ -35,7 +46,7 @@ export async function etsyFetch<T>(path: string, init: RequestInit = {}, require
   const headers = new Headers(init.headers);
   headers.set("x-api-key", xApiKey());
   if (requireAuth) headers.set("Authorization", `Bearer ${await getAccessToken()}`);
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  const res = await fetchEtsyResponse(`${API_BASE}${path}`, { ...init, headers });
   if (!res.ok) throw new Error(`Etsy ${res.status} ${res.statusText}: ${await res.text()}`);
   if (res.status === 204) return undefined as T;
   return await res.json() as T;
@@ -77,7 +88,7 @@ export async function getListingImages(shopId: number, listingId: number): Promi
   return result.results;
 }
 
-export async function createDigitalDraft(input: {shopId:number; source:EtsyListing; imageIds:number[]; title:string; description:string; tags:string[]; price?:number;}): Promise<EtsyListing> {
+export async function createDigitalDraft(input: {shopId:number; source:EtsyListing; imageIds:number[]; title:string; description:string; tags:string[]; price?:number; sectionId?:number;}): Promise<EtsyListing> {
   const src = input.source;
   if (!src.taxonomy_id) throw new Error("Source listing has no taxonomy_id.");
   if (!src.who_made) throw new Error("Source listing has no who_made value.");
@@ -95,6 +106,7 @@ export async function createDigitalDraft(input: {shopId:number; source:EtsyListi
   body.set("is_supply", "false");
   body.set("taxonomy_id", String(src.taxonomy_id));
   body.set("type", "download");
+  if (input.sectionId) body.set("shop_section_id", String(input.sectionId));
   if (input.imageIds.length) body.set("image_ids", input.imageIds.join(","));
   if (input.tags.length) body.set("tags", input.tags.slice(0, 13).join(","));
   return etsyFetch<EtsyListing>(`/application/shops/${input.shopId}/listings`, {
