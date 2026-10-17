@@ -857,3 +857,33 @@ Druckdatei und Erstellungsstatus liegen unter `<eingabeordner>/out/new-posters/<
 Nach einem Fehler denselben `poster:create`-Befehl mit denselben Optionen erneut ausführen: Der vorhandene Entwurf wird wiederverwendet, unvollständige Uploads werden über den bisherigen Resume-Ablauf fortgesetzt. Bereits abgeschlossene Verarbeitungsschritte verwenden ihre gespeicherten Statusdateien. Bei einem ungewissen Upload-Ergebnis wird zur Prüfung angehalten, statt blind erneut hochzuladen. Titel und Beschreibung bestehender Entwürfe werden dabei wie bisher nicht neu geschrieben. Direkte Einzelbefehle nicht parallel zum Gesamtlauf ausführen. Nach einem Prozessabsturz `.poster-process-lock` nur entfernen, wenn kein Gesamtlauf mehr aktiv ist.
 
 `poster:create` ist der Gesamtbefehl. Nur den Entwurf ohne Wasserzeichen und Mockup erstellt bei Bedarf `npm run poster:draft -- --dir ./mein-poster`.
+
+### Gedruckte Poster: Preise nach Größe aktualisieren
+
+`poster:prices` bearbeitet ausschließlich physische EUR-Artikel in der Shop-Abteilung **Poster**. Die festen Artikelpreise sind 20,99 € für 30 × 40 cm, 24,99 € für 45 × 60 cm und 30,99 € für 60 × 80 cm. Entsprechende Zollangaben werden ebenfalls erkannt. Versandpreise werden nicht bearbeitet.
+
+```bash
+# Vorschau für alle aktiven Poster
+npm run poster:prices -- preview
+
+# Preise aller aktiven Poster ändern
+npm run poster:prices -- update --confirm
+
+# Optional auch Entwürfe, inaktive, ausverkaufte und abgelaufene Poster einbeziehen
+npm run poster:prices -- preview --state all
+npm run poster:prices -- update --state all --confirm
+
+# Nur Entwürfe
+npm run poster:prices -- preview --state draft
+```
+
+Vor dem ersten Schreiben werden alle ausgewählten Varianten geprüft. Unbekannte oder widersprüchliche Größen brechen den Durchlauf ab. SKUs, Bestände, Aktivierung und Bearbeitungsprofile bleiben erhalten. Vorherige Bestände und geplante Änderungen werden unter `out/poster-prices/` gesichert. Ein zwischenzeitlich geänderter Bestand stoppt den Durchlauf; bereits erfolgte Änderungen bleiben bestehen. Nach jedem Update wird der Bestand erneut geprüft. Erneute Aufrufe überspringen bereits korrekte Preise. Gelato-Vorlagen werden dadurch nicht geändert.
+
+Die drei Preise lassen sich einzeln überschreiben; ohne Preisparameter gelten weiterhin 20,99 / 24,99 / 30,99 €. Punkt und Komma sind als Dezimaltrennzeichen erlaubt, maximal zwei Nachkommastellen.
+
+```bash
+npm run poster:prices -- preview --price-30x40 20.99 --price-45x60 24.99 --price-60x80 30.99
+npm run poster:prices -- update --price-30x40 20.99 --price-45x60 24.99 --price-60x80 30.99 --confirm
+```
+
+Die Preisparameter gelten auch mit `--state all` oder `--state draft`.

@@ -33,7 +33,9 @@
     "poster:preview": "tsx src/new-poster.ts",
     "poster:create": "tsx src/poster-process.ts",
     "test:poster": "node --import tsx --test src/new-poster.test.ts src/poster-process.test.ts",
-    "poster:draft": "tsx src/new-poster.ts --create"
+    "poster:draft": "tsx src/new-poster.ts --create",
+    "poster:prices": "tsx src/poster-prices.ts",
+    "test:poster-prices": "node --import tsx --test src/poster-prices.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.6.1",
